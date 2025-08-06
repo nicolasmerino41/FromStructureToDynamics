@@ -17,7 +17,9 @@ This repository contains all the code and data necessary to reproduce the analys
 ---
 
 ## 🗂️ Repository Structure
+
 your-project/
+
 ├── src/ # main code
 ├── notebooks/ # demos and experiments
 ├── data/ # dataset download and processing scripts
