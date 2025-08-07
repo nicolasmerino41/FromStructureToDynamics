@@ -135,7 +135,7 @@ function plot_correlations(
 
     # Save the figure
     if save_plot
-        filename = "Correlation_results_for_scenarios_$(join(scenarios, "_")).png"
+        filename = "../Figures/Correlation_results_for_scenarios_$(join(scenarios, "_")).png"
         save(filename, fig; px_per_unit=pixels_per_unit)
     end
 
@@ -314,7 +314,7 @@ function plot_error_vs_structural_properties(
     display(fig)
 
     if save_plot
-        save("error_vs_structure.png", fig; px_per_unit=pixels_per_unit)
+        save("../Figures/error_vs_structure.png", fig; px_per_unit=pixels_per_unit)
     end
 
     return df
