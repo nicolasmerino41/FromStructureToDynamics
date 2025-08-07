@@ -35,5 +35,20 @@ This repository contains all the Julia code and data necessary to reproduce the 
 └── supplementary/          # Additional material (appendices, code outputs)
 ```
 
+## ⚙️ Installation
+To set up the environment and install all dependencies:
+```bash
+# Clone the repository
+git clone https://github.com/your-username/FromStructureToDynamics.git
+cd FromStructureToDynamics
+
+# Start Julia with the project environment
+julia --project=.
+
+# Inside Julia:
+using Pkg
+Pkg.instantiate()
+```
+
 
 
