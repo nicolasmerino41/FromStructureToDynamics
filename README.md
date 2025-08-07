@@ -10,14 +10,19 @@ Official code for the paper:
 
 ## 📌 Overview
 
-This repository contains all the Julia code and data necessary to reproduce the analyses and figures presented in the article "From Structure to Dynamics: A General View of Community-level Features". It includes scripts for generating ecological communities, applying network modifications, computing community- and species-level metrics, and performing the statistical analyses described in the manuscript.
+This repository contains all the Julia code and data necessary to reproduce the analyses and figures presented in the article "From Structure to Dynamics: A General View of Community-level Features". It includes functions for generating ecological communities, applying network modifications, computing community- and species-level metrics, and performing the analyses described in the manuscript.
 
 ## 🗂️ Repository Structure
-
 ```bash
 ├── README.md               
-├── Code/                   
-├── Figures/                
+├── Code/
+  |── Functions.jl
+  |── MainScript.jl # Only this script needs to be run
+  |── PackageLoading.jl
+  |── Plotting.jl                
+├── Figures/
+  |── Correlation_results_for_scenarios_ER_PL_MOD.png   # Figure 2 of the paper
+  |── error_vs_structure.png                            # Figure 3 of the paper             
 ├── Outputs/                # .jls objects to be saved
 ├── paper.pdf               # PDF of the paper
 ├── Project.toml            # Package dependencies
