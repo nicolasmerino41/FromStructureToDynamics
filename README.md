@@ -53,7 +53,7 @@ Running MainScript.jl will allow you to generate Figure 2 and 3 from the paper. 
 ![Correlation Plot](Figures/Correlation_results_for_scenarios_ER_PL_MOD.png)
 
 **Figure 3**
-![Error Vs Structure Plot](figures/error_vs_structure.png)
+![Error Vs Structure Plot](Figures/error_vs_structure.png)
 
 
 
