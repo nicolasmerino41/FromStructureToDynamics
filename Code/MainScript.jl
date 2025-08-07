@@ -313,7 +313,7 @@ plot_correlations(
     scenarios = [:ER, :PL, :MOD],
     steps = [1, 2, 3, 5],
     fit_to_1_1_line=true,
-    save_plot = false,
+    save_plot = true,
     resolution = (1100, 1000),
     pixels_per_unit = 6
 )
