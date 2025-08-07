@@ -1,6 +1,16 @@
-# === Main Simulation Script ===
-# Load all helper functions
+# Load all helper scripts
+include("PackageLoading.jl")
 include("Functions.jl")
+include("Plotting.jl")
+const EXTINCTION_THRESHOLD = 1e-6
+
+# -------------------------------------------------------------------------
+# ---------------------------- SIMULATION PART ----------------------------
+# -------------------------------------------------------------------------
+
+# NOTE: Running the simulations can be quite time-consuming and might require a lot of RAM.
+# If the run collapses, try reducing the number of total number of combinations
+# (not the argument "number_of_combinations", that'll do nothing).
 
 """
 RunSimulations(...)
@@ -57,37 +67,37 @@ function RunSimulations(
     @info "Computing $(length(combos)) combinations"
 
     # Build solver callbacks globally
-    global cb = build_callbacks(50, 1e-6)
+    global cb = build_callbacks(50, EXTINCTION_THRESHOLD)
 
     # Run simulations in parallel
     @threads for (conn, scen, IS, delta, marg, ite, pex, p_min_deg, mod_gamma) in
             sample(combos, min(length(combos), number_of_combinations); replace=false)
 
-        # === Step 1: Build network and interaction matrix ===
-        A = make_A(
+        # --- Step 1: Build network and interaction matrix ---
+        A = make_network(
             zeros(S,S), R, conn, scen; IS=IS,
             pareto_exponent=pex, pareto_minimum_degree=p_min_deg, mod_gamma=mod_gamma
         )
 
-        # === Step 2: Compute collectivity metric ===
+        # --- Step 2: Compute collectivity metric ---
         phi = compute_collectivity(A) # Not used in the final paper results, but interesting though
 
-        # === Step 3: Determine feasible K and equilibrium ===
+        # --- Step 3: Determine feasible K's and equilibrium abundances ---
         thr_sets = generate_feasible_thresholds(A, R; margins=[marg])
         isempty(thr_sets) && continue  # Skip iteration if no thresholds found
         tset = thr_sets[1]
         K    = tset.K
         u_eq = tset.u_eq
 
-        # === Step 4: Test survivability and local stability ===
+        # --- Step 4: Test survivability and local stability ---
         ok, u0 = survives!(u_eq, (K,A); cb=cb)
         !ok && continue
 
         J = compute_jacobian_glv(u0, (K,A))
         !is_locally_stable(J) && continue
 
-        # === Step 5: Metrics on full system ===
-        S_full = count(x->x>1e-6, u0) # This must be equivalent to S by definition
+        # --- Step 5: Metrics from full model ---
+        S_full = count(x->x>EXTINCTION_THRESHOLD, u0) # This must be equivalent to S by definition
         resilience_full = compute_resilience(u0, (K,A))
         reactivity_full = compute_reactivity(u0, (K,A))
 
@@ -113,7 +123,7 @@ function RunSimulations(
 
         rmed_full = analytical_median_return_rate(J; t=1.0)
 
-        # === Step 6: Modification ladder ===
+        # --- Step 6: Modification ladder ---
         after_press_S = Dict(i=>NaN for i in 1:5)
         after_pulse_S = Dict(i=>NaN for i in 1:5)
         rt_press_S    = Dict(i=>NaN for i in 1:5)
@@ -133,27 +143,27 @@ function RunSimulations(
 
             # Step-specific simplified models
             if step == 1 # Simple rewiring
-                A_s = make_A(A_s, R, conn, scen; IS=IS)
+                A_s = make_network(A_s, R, conn, scen; IS=IS)
             
             elseif step == 2 # Rewiring + ↻C
                 new_conn = rand()
                 while abs(new_conn - conn) < 0.4
                     new_conn = rand()
                 end
-                A_s = make_A(A_s, R, new_conn, scen; IS=IS)
+                A_s = make_network(A_s, R, new_conn, scen; IS=IS)
             
             elseif step == 3 # Rewiring + ↻IS
-                A_s = make_A(A_s, R, conn, scen; IS=IS*10)
+                A_s = make_network(A_s, R, conn, scen; IS=IS*10)
             
             elseif step == 4 # Rewiring + ↻C + ↻IS
                 new_conn = rand()
                 while abs(new_conn - conn) < 0.4
                     new_conn = rand()
                 end
-                A_s = make_A(A_s, R, new_conn, scen; IS=IS*10)
+                A_s = make_network(A_s, R, new_conn, scen; IS=IS*10)
             
             elseif step == 5 # Rewiring + Group reassignment
-                A_s = make_A(A_s, R-5, conn, scen; IS=IS)
+                A_s = make_network(A_s, R-5, conn, scen; IS=IS)
             end
 
             # For step 5, turn 5 resources into consumers by setting their K to effectively 0
@@ -170,16 +180,22 @@ function RunSimulations(
 
             ok2, u0_s = survives!(u_eq_s, (K,A_s); cb=cb)
 
-            # Compute reduced metrics
-            S_S[step] = count(x->x>1e-6, u0_s)
+            # Compute same metrics from each step
+            S_S[step] = count(x -> x > EXTINCTION_THRESHOLD, u0_s) # N of extant species
 
             rt_s_press, _, after_press_s, _ =
-                simulate_press_perturbation_glv(u0_s, (K,A_s), tspan, tpert, delta, R; cb=cb)
+                simulate_press_perturbation_glv(
+                    u0_s, (K,A_s), tspan, tpert, delta, R;
+                    cb=cb
+                )
             after_press_S[step] = after_press_s
             rt_press_S[step] = mean(skipmissing(rt_s_press))
 
             rt_s_pulse, _, after_pulse_s, _ =
-                simulate_pulse_perturbation_glv(u0_s, (K,A_s), tspan, tpert, delta; cb=cb)
+                simulate_pulse_perturbation_glv(
+                    u0_s, (K,A_s), tspan, tpert, delta;
+                    cb=cb
+                )
             after_pulse_S[step] = after_pulse_s
             rt_pulse_S[step] = mean(skipmissing(rt_s_pulse))
 
@@ -195,7 +211,7 @@ function RunSimulations(
             mean_SL_S[step] = mean(SL_S[step])
         end
 
-        # Flatten all step metrics into a single record
+        # Flatten all step metrics
         step_pairs = collect(Iterators.flatten(
             ([ 
                 Symbol("after_press_S$i") => after_press_S[i],
@@ -213,7 +229,7 @@ function RunSimulations(
              ] for i in 1:5)
         ))
 
-        # Final simulation record
+        # Final reults tuple
         rec = (
             conn=conn, scen=scen, IS=IS, delta=delta, marg=marg, ite=ite,
             S_full=S_full,
@@ -244,32 +260,75 @@ function RunSimulations(
     return DataFrame(results)
 end
 
-# === Run simulations for multiple S, C values ===
-function run_all_glv()
-    R_all = DataFrame()
-    for i in [(100, 40), (50, 20), (200, 80), (300, 120)]
+# --- Run simulations for multiple S and C values ---
+function RunAllSimulations(;
+    S_R_combinations = [(100, 40), (50, 20), (200, 80), (300, 120)],
+    number_of_combinations_per_pair = 50000
+)
+    sim_results = DataFrame()
+    for i in S_R_combinations
         a, b = i[1], i[2]
-        R = checking_recalculating_demography_glv(
+        sim = RunSimulations(
             a, b;
             conn_vals=0.01:0.01:1.0,
             scenarios=[:ER, :PL, :MOD],
             IS_vals=[0.01, 0.1, 1.0, 2.0],
             delta_vals=[0.1, 0.9, 1.1, 1.5, 2.0, 3.0, 4.0, 5.0, -1.0, -2.0, -3.0, -4.0, -5.0],
             margins=[1.0, 2.0, 3.0, 4.0, 5.0, 0.01],
-            number_of_combinations=50000,
+            number_of_combinations=number_of_combinations_per_pair,
             iterations=1,
             pareto_exponents=[1.0, 1.25, 1.75, 2.0, 3.0, 4.0, 5.0],
             pareto_minimum_degrees=[5.0, 10.0, 15.0, 20.0],
             mod_gammas=[1.0,2.0,3.0,5.0,10.0]
         )
-        R_all = vcat(R_all, R; cols=:union)
+        sim_results = vcat(sim_results, sim)
     end
-    return R_all
+    return sim_results
 end
 
-# === Execute and save ===
-R_all = run_all_glv()
-serialize("checking_glv_50000perSpeciesN.jls", R_all)
+# Execute and save
+sim_results = RunAllSimulations(;
+    S_R_combinations = [(100, 40), (50, 20), (200, 80), (300, 120)],
+    number_of_combinations_per_pair = 50000
+)
+serialize("SimulationResults.jls", sim_results)
 
-# === Load (optional) ===
-R = deserialize("checking_glv_50000perSpeciesN.jls")
+# ---------------------------------------------------------------------
+# ------------------------ POSTPROCESSING PART ------------------------
+# ---------------------------------------------------------------------
+# For visualising the article's figure 2, we need to remove unstable iterations 
+# (i.e., iterations in which at least one modification step became unstable; that is, resilience > 0).
+stable_sim_results = sim_results
+
+step_keys = ["_full","_S1","_S2","_S3","_S5"] # We skip S4 because it was not included in final figure
+res_cols = Symbol.("resilience" .* step_keys)
+stable_sim_results = filter(row -> all(row[c] < 0 for c in res_cols), stable_sim_results)
+
+# --------------------------------------------------------------------------
+# ---------------------------- CREATING FIGURES ----------------------------
+# --------------------------------------------------------------------------
+# Figure 2
+plot_correlations(
+    stable_sim_results;
+    scenarios = [:ER, :PL, :MOD],
+    steps = [1, 2, 3, 5],
+    fit_to_1_1_line=true,
+    save_plot = false,
+    resolution = (1100, 1000),
+    pixels_per_unit = 6
+)
+
+# Figure 3
+fig_3 = plot_error_vs_structural_properties(
+    sim_results;
+    steps=[1, 2, 3, 5],
+    remove_unstable=false,
+    n_bins=30,
+    save_plot=true,
+    error_bars=false,
+    outlier_quantile=0.9,
+    outlier_quantile_x=1.0,
+    relative_error = true,
+    resolution = (1100, 1000),
+    pixels_per_unit = 6
+)
