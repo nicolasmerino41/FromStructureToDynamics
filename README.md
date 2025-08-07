@@ -49,6 +49,7 @@ Code/MainScript.jl
 ```
 ## 📊 Figures
 Running MainScript.jl will allow you to generate Figure 2 and 3 from the paper. You can modify several arguments to match your interests, both content- and aesthetically-wise.
+
 **Figure 2**
 ![Correlation Plot](Figures/Correlation_results_for_scenarios_ER_PL_MOD.png)
 
