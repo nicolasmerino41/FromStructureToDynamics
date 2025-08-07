@@ -1,3 +1,4 @@
+# === Helper Functions Script ===
 # --------------------------------------------------------------------------------
 # 1) gLV dynamics
 # --------------------------------------------------------------------------------
@@ -11,7 +12,75 @@ function gLV_rhs!(du, u, p, t)
 end
 
 # --------------------------------------------------------------------------------
-# 2) Compute SL = B ./ K
+# 2) Create network
+# --------------------------------------------------------------------------------
+function make_network(
+    A::AbstractMatrix, R::Int, conn::Float64, scenario::Symbol;
+    IS = 1.0,
+    pareto_exponent::Float64=1.75,
+    pareto_minimum_degree=1.0,
+    mod_gamma::Float64=5.0,
+    B_term::Bool=false,
+    B_term_IS::Float64=0.1
+)
+    S = size(A,1)
+    C = S - R
+    fill!(A, 0.0)
+
+    if scenario == :ER
+        for i in (R+1):S, j in 1:R
+            if rand() < conn && i != j
+                A[i,j] = abs(rand(Normal(0.0, IS)))
+                A[j,i] = -abs(rand(Normal(0.0, IS)))
+            end
+        end
+        
+    elseif scenario == :PL
+        raw = rand(Pareto(pareto_minimum_degree, pareto_exponent), C)
+        ks  = clamp.(floor.(Int, raw), 1, R)
+        for (idx,k) in enumerate(ks)
+            i = R + idx
+            for j in sample(1:R, min(k,R); replace=false)
+                if i != j
+                    A[i,j] = abs(rand(Normal(0.0, IS)))
+                    A[j,i] = -abs(rand(Normal(0.0, IS)))
+                end
+            end
+        end
+
+    elseif scenario == :MOD
+        halfR, halfC = fld(R,2), fld(C,2)
+        res1, res2   = 1:halfR, (halfR+1):R
+        con1, con2   = (R+1):(R+halfC), (R+halfC+1):S
+
+        for i in (R+1):S, j in 1:R
+            same = (i in con1 && j in res1) || (i in con2 && j in res2)
+            p    = same ? conn*mod_gamma : conn/mod_gamma
+            if rand() < clamp(p,0,1) && i != j
+                A[i,j] = abs(rand(Normal(0.0, IS)))
+                A[j,i] = -abs(rand(Normal(0.0, IS)))
+            end
+        end
+
+    else
+        error("Unknown scenario $scenario")
+    end
+
+    # optionally sprinkle in consumer-consumer predation
+    if B_term
+        for i in (R+1):S, j in (R+1):S
+            if i != j && rand() < conn
+                A[i,j] = abs(rand(Normal(0.0, B_term_IS)))
+                A[j,i] = -abs(rand(Normal(0.0, B_term_IS)))
+            end
+        end
+    end
+
+    return A
+end
+
+# --------------------------------------------------------------------------------
+# 3) Compute SL = B ./ K
 # --------------------------------------------------------------------------------
 function compute_SL(A::Matrix{Float64}, K::Vector{Float64})
     B = (I + A) 
@@ -20,7 +89,7 @@ function compute_SL(A::Matrix{Float64}, K::Vector{Float64})
 end
 
 # --------------------------------------------------------------------------------
-# 3) Extract sigma/min(d) for Jacobian J
+# 4) Extract sigma/min(d) for Jacobian J
 # --------------------------------------------------------------------------------
 function sigma_over_min_d(A, J)
     d = -diag(J)
@@ -37,14 +106,14 @@ function sigma_over_min_d(A, J)
 end
 
 # --------------------------------------------------------------------------------
-# 4) rewire in place
+# 5) rewire in place
 # --------------------------------------------------------------------------------
 function rewire_A!(A, mask, sigma)
     A[mask] .= randn(sum(mask)) .* sigma
 end
 
 # --------------------------------------------------------------------------------
-# 5) Equilibrium and feasibility for gLV
+# 6) Equilibrium and feasibility
 # --------------------------------------------------------------------------------
 function calibrate_from_K_A(K::Vector{<:Real}, A::AbstractMatrix)
     # Solve (I + A) * u = K
@@ -52,12 +121,12 @@ function calibrate_from_K_A(K::Vector{<:Real}, A::AbstractMatrix)
     return u
 end
 
-function generate_feasible_thresholds(A::AbstractMatrix; margins=[1.0])
+function generate_feasible_thresholds(A::AbstractMatrix, R; margins=[1.0])
     S = size(A,1)
     out = NamedTuple[]
     for marg in margins
         K = abs.(rand(Normal(2.0, 1.0), S) .* marg)
-        K[31:50] .= 0.01
+        K[R+1:end] .= 0.01
         u_eq = try
             calibrate_from_K_A(K, A)
         catch
@@ -77,7 +146,7 @@ function generate_feasible_thresholds(A::AbstractMatrix; margins=[1.0])
 end
 
 # --------------------------------------------------------------------------------
-# 6) Stability check
+# 7) Stability check
 # --------------------------------------------------------------------------------
 function is_locally_stable(J::AbstractMatrix)
     if any(!isfinite, J)
@@ -88,7 +157,7 @@ function is_locally_stable(J::AbstractMatrix)
 end
 
 # --------------------------------------------------------------------------------
-# 7) Survival simulation
+# 8) Survival simulation
 # --------------------------------------------------------------------------------
 function survives!(fixed, p; tspan=(0.,500.), cb)
     prob = ODEProblem(gLV_rhs!, fixed, tspan, p)
@@ -97,18 +166,8 @@ function survives!(fixed, p; tspan=(0.,500.), cb)
 end
 
 # --------------------------------------------------------------------------------
-# 8) Jacobian, resilience, reactivity
+# 9) Jacobian, resilience, reactivity
 # --------------------------------------------------------------------------------
-function compute_jacobian(u, p)
-    K, A = p
-    S = length(u)
-    # D = diag(u)
-    D = Diagonal(u)
-    # Mstar = -I - A
-    Mstar = -I(S) - A
-    return D, Mstar
-end
-
 function compute_jacobian_glv(Bstar::AbstractVector, p)
     # g(u) returns f(u)the time‐derivative at state u
     g(u) = begin
@@ -160,7 +219,7 @@ function compute_reactivity(B, p; extinct_species = false)
 end
 
 # --------------------------------------------------------------------------------
-# 9) Compute collectivity
+# 10) Compute collectivity
 # --------------------------------------------------------------------------------
 function compute_collectivity(A::AbstractMatrix)
     vals = eigvals(A)
@@ -168,11 +227,11 @@ function compute_collectivity(A::AbstractMatrix)
 end
 
 # --------------------------------------------------------------------------------
-# 10) Press and pulse perturbation functions
+# 11) Press and pulse perturbation functions
 # --------------------------------------------------------------------------------
 # Press perturbation
 function simulate_press_perturbation_glv(
-    u0, p, tspan, t_perturb, delta;
+    u0, p, tspan, t_perturb, delta, R;
     solver=Tsit5(), plot=false, cb=nothing
 )
     # Phase 1: pre-perturb
@@ -183,7 +242,7 @@ function simulate_press_perturbation_glv(
     
     # Phase 2: perturb K by (1 - delta)
     K, A = p
-    K_press = vcat(K[1:30] .* (1 .- delta), K[31:end])
+    K_press = vcat(K[1:R] .* (1 .- delta), K[R+1:end])
     p_press = (K_press, A)
     prob2 = ODEProblem(gLV_rhs!, pre_state, (t_perturb, tspan[2]), p_press)
     sol2  = solve(prob2, solver; callback=cb, abstol=1e-8, reltol=1e-8)
@@ -241,7 +300,7 @@ function simulate_pulse_perturbation_glv(
 end
 
 # --------------------------------------------------------------------------------
-# 11) Callback builder
+# 12) Callback builder
 # --------------------------------------------------------------------------------
 function build_callbacks(S::Int, EXTINCTION_THRESHOLD::Float64)
     # A) Continuous threshold-based extinctions
@@ -269,7 +328,7 @@ function build_callbacks(S::Int, EXTINCTION_THRESHOLD::Float64)
 end
 
 # --------------------------------------------------------------------------------
-# 12) Analytical Median Return Rate
+# 13) Analytical Median Return Rate
 # --------------------------------------------------------------------------------
 """
     analytical_species_return_rates(J::AbstractMatrix; t::Real=0.01)
