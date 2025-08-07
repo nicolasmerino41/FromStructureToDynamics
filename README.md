@@ -1,4 +1,4 @@
-# 🚀 From Structure to Dynamics
+# From Structure🕸️ to Dynamics📈
 
 [![Paper](https://img.shields.io/badge/Paper-Open_Access-blue)](link_to_paper)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
