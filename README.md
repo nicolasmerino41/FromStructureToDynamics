@@ -6,7 +6,7 @@
 Official code for the paper:
 > **"From Structure to Dynamics: A General View of Community-level Features"**  
 > *Nicolàs Merino, Núria Galiana, Jean-François Arnoldi, Miguel B. Araújo*  
-> Conference/Journal, Year
+> Journal, Year
 
 ## 📌 Overview
 
