@@ -262,11 +262,11 @@ end
 
 # --- Run simulations for multiple S and C values ---
 function RunAllSimulations(;
-    S_R_combinations = [(100, 40), (50, 20), (200, 80), (300, 120)],
+    S_C_combinations = [(100, 40), (50, 20), (200, 80), (300, 120)],
     number_of_combinations_per_pair = 50000
 )
     sim_results = DataFrame()
-    for i in S_R_combinations
+    for i in S_C_combinations
         a, b = i[1], i[2]
         sim = RunSimulations(
             a, b;
@@ -288,10 +288,10 @@ end
 
 # Execute and save
 sim_results = RunAllSimulations(;
-    S_R_combinations = [(100, 40), (50, 20), (200, 80), (300, 120)],
-    number_of_combinations_per_pair = 50000
+    S_C_combinations = [(100, 40), (50, 20), (200, 80), (300, 120)],
+    number_of_combinations_per_pair = 1000 #50000
 )
-serialize("SimulationResults.jls", sim_results)
+serialize("Outputs/SimulationResults.jls", sim_results)
 
 # ---------------------------------------------------------------------
 # ------------------------ POSTPROCESSING PART ------------------------
@@ -321,7 +321,7 @@ plot_correlations(
 # Figure 3
 fig_3 = plot_error_vs_structural_properties(
     sim_results;
-    steps=[1, 2, 3, 5],
+    steps=[1], # [1, 2, 3, 5],
     remove_unstable=false,
     n_bins=30,
     save_plot=true,
@@ -331,4 +331,24 @@ fig_3 = plot_error_vs_structural_properties(
     relative_error = true,
     resolution = (1100, 1000),
     pixels_per_unit = 6
+)
+
+# Show a 3×3 grid of random SADs
+plot_random_SAD_grid(sim_results; n=9, bins=40, log10=true, save_plot=false, which = :all)
+
+plot_random_SAD_grid(sim_results; n=9, bins=30, log10=false, save_plot=false, which = :R)
+
+plot_random_SAD_grid(sim_results; n=9, bins=30, log10=false, save_plot=false, which = :C)
+
+# One-row, 4-panel species-level alignment of SL_time across steps 1,2,3,5
+plot_species_level_SL_correlations(
+    sim_results;
+    steps=[1,2,3,5],
+    subsample_frac=0.4,      # thin points to keep it crisp
+    max_points=150_000,
+    alpha=0.15,
+    save_plot=true,
+    filename="Figures/species_level_SL_alignment.png",
+    resolution=(1100, 320),
+    pixels_per_unit=6
 )
