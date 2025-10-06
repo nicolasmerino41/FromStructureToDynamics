@@ -135,7 +135,7 @@ function plot_correlations(
 
     # Save the figure
     if save_plot
-        filename = "../Figures/Correlation_results_for_scenarios_$(join(scenarios, "_")).png"
+        filename = "Figures/Correlation_results_for_scenarios_$(join(scenarios, "_")).png"
         save(filename, fig; px_per_unit=pixels_per_unit)
     end
 
@@ -314,8 +314,246 @@ function plot_error_vs_structural_properties(
     display(fig)
 
     if save_plot
-        save("../Figures/error_vs_structure.png", fig; px_per_unit=pixels_per_unit)
+        save("Figures/error_vs_structure.png", fig; px_per_unit=pixels_per_unit)
     end
 
     return df
+end
+
+"""
+    plot_random_SAD_grid(df::DataFrame;
+        n::Int=9, bins::Int=30, log10::Bool=false,
+        seed::Union{Nothing,Int}=nothing,
+        save_plot::Bool=false,
+        filename::String="../Figures/random_SAD_grid.png",
+        resolution=(1100, 1100), pixels_per_unit=6
+    )
+
+Pick 9 random systems from `df` and plot their Species Abundance Distributions (SADs)
+as 3×3 histograms of the equilibrium abundances `B_eq` (extant species only, > 1e-6).
+- If `log10=true`, it plots log10-abundances.
+- Re-run to get a new random sample (set `seed` for reproducibility).
+"""
+function plot_random_SAD_grid(
+    df::DataFrame;
+    n::Int=9, bins::Int=30, log10::Bool=false,
+    which::Symbol=:all,                # :all, :R (resources), :C (consumers)
+    k_consumer_cutoff::Float64=0.015,  # classify consumers as K ≤ this (full-model K has 0.01)
+    ext_threshold::Float64=1e-6,       # only plot extant spp.
+    seed::Union{Nothing,Int}=nothing,
+    save_plot::Bool=false,
+    filename::String="../Figures/random_SAD_grid.png",
+    resolution=(1100, 800), pixels_per_unit=6
+)
+    nrow(df) == 0 && error("DataFrame is empty.")
+    nsel = min(n, nrow(df))
+    seed === nothing || Random.seed!(seed)
+
+    idxs = sample(1:nrow(df), nsel; replace=false)
+
+    fig = Figure(; size=resolution)
+    nrows, ncols = 3, 3
+    lab = which === :R ? " (R only)" : which === :C ? " (C only)" : ""
+
+    for (k, idx) in enumerate(idxs)
+        i = fldmod1(k, ncols)[1]
+        j = fldmod1(k, ncols)[2]
+        ax = Axis(fig[i, j];
+            title = "SAD #$idx$lab",
+            xlabel = log10 ? "log10 abundance" : "abundance",
+            ylabel = "count",
+            xgridvisible=false, ygridvisible=false
+        )
+
+        # abundances (full model) and group mask from full-model K
+        abund = copy(df[idx, :B_eq])::Vector{Float64}
+        K, _A = df[idx, :p_final]
+        @assert length(K) == length(abund)
+
+        # choose species subset
+        mask = trues(length(K))
+        if which === :R
+            mask .= K .> k_consumer_cutoff        # resources: larger K
+        elseif which === :C
+            mask .= K .<= k_consumer_cutoff       # consumers: ~0.01
+        elseif which === :all
+            # keep mask = trues
+        else
+            error("Argument `which` must be :all, :R, or :C")
+        end
+
+        abund = abund[mask]
+        abund = abund[abund .> ext_threshold]     # extant only
+
+        if isempty(abund)
+            text!(ax, "No extant spp.", position=(0.5, 0.5), align=(:center,:center))
+            continue
+        end
+
+        vals = abund # log10 ? log10.(abund .+ 1e-12) : abund
+        hist!(ax, vals; bins=bins, normalization=:none)
+    end
+
+    display(fig)
+    if save_plot
+        save(filename, fig; px_per_unit=pixels_per_unit)
+    end
+    return nothing
+end
+
+"""
+    plot_species_level_SL_correlations(
+        df::DataFrame;
+        steps = [1, 2, 3, 5],
+        fit_to_1_1_line::Bool = true,
+        subsample_frac::Float64 = 0.5,   # 0–1; lower to thin points
+        max_points::Int = 200_000,       # hard cap for performance
+        alpha::Float64 = 0.15,
+        save_plot::Bool = false,
+        filename::String = "../Figures/species_level_SL_alignment.png",
+        resolution = (1100, 320),
+        pixels_per_unit = 6.0,
+        seed::Union{Nothing,Int} = nothing
+    )
+
+Species-level alignment of SL_time (−1 / J_ii): each panel scatters
+SL_full (x) vs SL_step (y) across ALL species in ALL runs.
+A 1:1 line is shown; text reports R² to the 1:1 line.
+"""
+function plot_species_level_SL_correlations(
+    df::DataFrame;
+    steps = [1, 2, 3, 5],
+    fit_to_1_1_line::Bool = true,
+    subsample_frac::Float64 = 0.5,
+    max_points::Int = 200_000,
+    alpha::Float64 = 0.15,
+    save_plot::Bool = false,
+    filename::String = "../Figures/species_level_SL_alignment.png",
+    resolution = (1100, 320),
+    pixels_per_unit = 6.0,
+    seed::Union{Nothing,Int} = nothing
+)
+    seed === nothing || Random.seed!(seed)
+
+    step_names = Dict(
+        1 => "Rewiring",
+        2 => "Rewiring + ↻C",
+        3 => "Rewiring + ↻IS",
+        4 => "Rewiring + ↻C + ↻IS",
+        5 => "Changing groups"
+    )
+
+    # helper to compute R² to the 1:1 line
+    _r2_to_1to1 = function(x::AbstractVector{<:Real}, y::AbstractVector{<:Real})
+        if isempty(x) || isempty(y)
+            return NaN
+        end
+        yhat = x
+        μy   = mean(y)
+        sst  = sum((y .- μy).^2)
+        ssr  = sum((y .- yhat).^2)
+        return sst == 0 ? NaN : 1 - ssr/sst
+    end
+
+    ncols = length(steps)
+    fig = Figure(; size = resolution)
+
+    # Aesthetic: use your red palette variations
+    dot_colors = [:firebrick, :orangered, :crimson, :darkred]
+
+    for (j, step) in enumerate(steps)
+        # collect species-level pairs across all rows
+        xs = Float64[]
+        ys = Float64[]
+
+        s_col = Symbol("SL_S$(step)")
+        for row in eachrow(df)
+            sfull = row.SL_full
+            sstep = row[s_col]
+
+            # Safety: align lengths if needed
+            m = min(length(sfull), length(sstep))
+            if m == 0; continue; end
+
+            for k in 1:m
+                xi = sfull[k]
+                yi = sstep[k]
+                if isfinite(xi) && isfinite(yi)
+                    push!(xs, xi)
+                    push!(ys, yi)
+                end
+            end
+        end
+
+        # optional subsampling / hard cap for performance
+        N = length(xs)
+        if N == 0
+            ax = Axis(fig[1, j]; title = "No data", xgridvisible=false, ygridvisible=false)
+            continue
+        end
+
+        # determine sample indices
+        nkeep = Int(clamp(round(N * subsample_frac), 1, N))
+        if nkeep > max_points
+            nkeep = max_points
+        end
+        keep_idx = nkeep == N ? collect(1:N) : sample(1:N, nkeep; replace=false)
+
+        xuse = @view xs[keep_idx]
+        yuse = @view ys[keep_idx]
+
+        # axis limits
+        mn = min(minimum(xuse), minimum(yuse))
+        mx = max(maximum(xuse), maximum(yuse))
+        if !isfinite(mn) || !isfinite(mx) || mn == mx
+            mn, mx = -1.0, 1.0
+        end
+
+        # panel
+        ax = Axis(fig[1, j];
+            title = "SL: $(get(step_names, step, "Step $step"))",
+            xlabel = "Full model",
+            ylabel = j == 1 ? "Simplified model" : "",
+            limits = ((mn, mx), (mn, mx)),
+            xgridvisible = false, ygridvisible = false,
+            xlabelsize = 11, ylabelsize = 11, titlesize = 12,
+            xticklabelsize = 10, yticklabelsize = 10
+        )
+
+        # scatter
+        scatter!(ax, xuse, yuse;
+            color = dot_colors[mod1(j, length(dot_colors))],
+            markersize = 3.5,
+            transparency = true,
+            alpha = alpha
+        )
+
+        # 1:1 line
+        lines!(ax, [mn, mx], [mn, mx]; color=:black, linestyle=:dash)
+
+        # R² or r
+        if fit_to_1_1_line
+            r2 = _r2_to_1to1(xuse, yuse)
+            if isfinite(r2)
+                text!(ax, "R²=$(round(r2, digits=3))";
+                    position = (mx, mn), align = (:right, :bottom),
+                    fontsize = 12, color = :black
+                )
+            end
+        else
+            r = cor(xuse, yuse)
+            if isfinite(r)
+                text!(ax, "r=$(round(r, digits=3))";
+                    position = (mx, mn), align = (:right, :bottom),
+                    fontsize = 12, color = :black
+                )
+            end
+        end
+    end
+
+    display(fig)
+    if save_plot
+        save(filename, fig; px_per_unit = pixels_per_unit)
+    end
+    return nothing
 end
