@@ -293,6 +293,7 @@ sim_results = RunAllSimulations(;
 )
 serialize("Outputs/SimulationResults.jls", sim_results)
 
+sim_results = deserialize("../../../../Downloads/SimulationResults5000.jls")
 # ---------------------------------------------------------------------
 # ------------------------ POSTPROCESSING PART ------------------------
 # ---------------------------------------------------------------------
@@ -321,11 +322,11 @@ plot_correlations(
 # Figure 3
 fig_3 = plot_error_vs_structural_properties(
     sim_results;
-    steps=[1], # [1, 2, 3, 5],
+    steps=[1], #[1, 2, 3, 5],
     remove_unstable=false,
     n_bins=30,
     save_plot=true,
-    error_bars=false,
+    error_bars=true,
     outlier_quantile=0.9,
     outlier_quantile_x=1.0,
     relative_error = true,
@@ -339,16 +340,31 @@ plot_random_SAD_grid(sim_results; n=9, bins=40, log10=true, save_plot=false, whi
 plot_random_SAD_grid(sim_results; n=9, bins=30, log10=false, save_plot=false, which = :R)
 
 plot_random_SAD_grid(sim_results; n=9, bins=30, log10=false, save_plot=false, which = :C)
+plot_random_SAD_grid(stable_sim_results; n=9, bins=30, log10=false, save_plot=false, which = :C)
+
+plot_error_vs_structural_properties(
+    sim_results;
+    steps=[1,2,3,5],
+    binning=:quantile,
+    trim_frac=0.1,
+    smooth_window=7,
+    error_bars=false,
+    save_plot=true
+)
 
 # One-row, 4-panel species-level alignment of SL_time across steps 1,2,3,5
 plot_species_level_SL_correlations(
-    sim_results;
+    stable_sim_results;
     steps=[1,2,3,5],
     subsample_frac=0.4,      # thin points to keep it crisp
-    max_points=150_000,
+    max_points=100000000000000000,
     alpha=0.15,
     save_plot=true,
     filename="Figures/species_level_SL_alignment.png",
     resolution=(1100, 320),
     pixels_per_unit=6
 )
+
+plot_species_level_SL_correlations(stable_sim_results; which=:all, sl_max=100)
+plot_species_level_SL_correlations(stable_sim_results; which=:R, sl_max=80)
+plot_species_level_SL_correlations(stable_sim_results; which=:C, sl_max=100, subsample_frac=0.5)
