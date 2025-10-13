@@ -472,7 +472,7 @@ function plot_species_level_SL_correlations(
     colors = [:firebrick, :orangered, :crimson, :darkred, :teal]
 
     fig = Figure(size = resolution)
-    Label(fig[0, 2:3], "Remove unstable: $(remove_unstable)", fontsize = 20, font = :bold, halign = :left)
+    Label(fig[0, 2:3], "which: $(which), Remove unstable: $(remove_unstable)", fontsize = 20, font = :bold, halign = :left)
 
     for (j, step) in enumerate(steps)
         col_step = _findcol(Symbol(:SL, :_S, step))
@@ -562,7 +562,7 @@ end
 plot_species_level_SL_correlations(
     sim_results;
     steps = [1, 2, 3, 5],
-    which = :all,        # :all | :R | :C
+    which = :R,        # :all | :R | :C
     fit_to_1_1_line = true,
     subsample_frac = 0.5,
     max_points = 200_000,

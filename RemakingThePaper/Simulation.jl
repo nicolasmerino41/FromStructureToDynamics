@@ -233,8 +233,8 @@ sim_results = RunAllSimulations(;
 @time sim_results = RunAllSimulations(;
     S_C_combinations = [(50,20), (75,30), (100,40), (125,50), (150,60),
                         (175,70), (200,80), (225,90), (250,100), (275,110), (300,120)],
-    number_of_combinations_per_pair = 1000
+    number_of_combinations_per_pair = 100
 )
 
-# serialize("Outputs/sim_results1000.jls", sim_results)
+serialize("../../../../../../D:/sim_results1000.jls", sim_results)
 sim_results = deserialize("Outputs/sim_results1000.jls")

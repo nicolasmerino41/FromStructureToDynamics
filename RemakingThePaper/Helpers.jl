@@ -612,103 +612,141 @@ function extract_metrics(u0::Vector{Float64}, K::Vector{Float64}, A::AbstractMat
     )
 end
 
-# ---------------------------------------------------------
-# Modification ladder - writes *_S1..*_S5 keys
-# ---------------------------------------------------------
-# Reuses existing callbacks and fast solver configuration
-function modification_ladder!(records::Vector{Pair{Symbol, Any}},
-                              ustar::Vector{Float64}, A::AbstractMatrix, K::Vector{Float64},
+"""
+    modification_ladder!(records, u0, A0, K0, S, R;
+        conn, cv_cons, cv_res, modularity, blocks, IS,
+        tspan=(0.0,500.0), tpert=250.0, delta=1.0,
+        cb=nothing, abstol=1e-6, reltol=1e-6, saveat=nothing,
+        compute_rmed_steps::Bool=false, rng=Random.default_rng())
+
+Builds 5 modified models and, for each, recomputes the equilibrium by integrating
+the ODE with the same demographics: K_res held from base, K_cons=0 (steps 1–4).
+Step 5 reassigns groups (R -> R2) and resamples a resource-K vector from the base distribution.
+
+Appends *_S1..*_S5 metrics to `records`.
+"""
+function modification_ladder!(records::Vector{Pair{Symbol,Any}},
+                              u0::Vector{Float64}, A0::Matrix{Float64}, K0::Vector{Float64},
                               S::Int, R::Int;
                               conn::Float64, cv_cons::Float64, cv_res::Float64,
                               modularity::Float64, blocks::Int, IS::Float64,
-                              tspan = (0.0, 200.0), tpert = 0.0, delta = 1.0,
-                              cb = nothing, abstol = 1e-6, reltol = 1e-6,
-                              saveat = range(tspan[1], tspan[2], length = 201),
-                              compute_rmed_steps::Bool = false,
+                              tspan=(0.0,500.0), tpert=250.0, delta=1.0,
+                              cb=nothing, abstol=1e-6, reltol=1e-6, saveat=nothing,
+                              compute_rmed_steps::Bool=false,
+                              IS_factor::Float64=10.0,
+                              conn_shift::Float64=0.35,
                               rng = Random.default_rng())
 
-    function step_metrics(step::Int, A_s::AbstractMatrix, K_s::Vector{Float64},
-                          ustar_s::Vector{Float64}, R_s::Int)
+    C = S - R
+    K_res_base = copy(K0[1:R])  # keep resource K's from the base model
+
+    # local helper: measure all step metrics given (A_s, u*_s, K_s, R_s)
+    function _step_metrics(step::Int, A_s::Matrix{Float64}, ustar_s::Vector{Float64},
+                           K_s::Vector{Float64}, R_s::Int)
         J_s = jacobian_at_equilibrium(A_s, ustar_s)
-        S_S = count(>(EXTINCTION_THRESHOLD), ustar_s)
 
         # Press perturbation
-        rt_s_press, _, after_press_s, _ =
+        rt_press_vec, _, after_press_s, _ =
             simulate_press_perturbation_glv(ustar_s, (K_s, A_s), tspan, tpert, delta, R_s;
-                                            cb = cb, abstol = abstol, reltol = reltol, saveat = saveat)
-        rt_press_S = mean(skipmissing(rt_s_press))
+                                            cb=cb, abstol=abstol, reltol=reltol, saveat=saveat)
+        rt_press_S = mean(skipmissing(rt_press_vec))
 
         # Pulse perturbation
-        rt_s_pulse, _, after_pulse_s, _ =
+        rt_pulse_vec, _, after_pulse_s, _ =
             simulate_pulse_perturbation_glv(ustar_s, (K_s, A_s), tspan, tpert, delta;
-                                            cb = cb, abstol = abstol, reltol = reltol, saveat = saveat)
-        rt_pulse_S = mean(skipmissing(rt_s_pulse))
+                                            cb=cb, abstol=abstol, reltol=reltol, saveat=saveat)
+        rt_pulse_S = mean(skipmissing(rt_pulse_vec))
 
-        collectivity_S = compute_collectivity(Matrix(A_s))
-        resilience_S   = maximum(real, eigvals(Matrix(J_s)))
-        reactivity_S   = maximum(real, eigvals(Matrix((J_s + J_s') / 2)))
-        sigma_over_min_d_S = sigma_over_min_d(Matrix(A_s), Matrix(J_s))
-        SL_S = diag(J_s) .|> x -> x == 0.0 ? 0.0 : -1 / x
+        collectivity_S = compute_collectivity(A_s)
+        resilience_S   = maximum(real, eigvals(J_s))
+        reactivity_S   = maximum(real, eigvals((J_s + J_s')/2))
+        sigma_over_min_d_S = sigma_over_min_d(A_s, J_s)
+        SL_S = diag(J_s) .|> x -> x == 0.0 ? 0.0 : -1.0/x
         mean_SL_S = mean(SL_S)
-        rmed_S = compute_rmed_steps ?
-            analytical_median_return_rate(Matrix(J_s); t = 1.0) :
-            median(-diag(J_s))
+        rmed_S = compute_rmed_steps ? analytical_median_return_rate(J_s; t=1.0) : NaN
 
-        push!(records, Symbol("after_press_S", step) => after_press_s)
-        push!(records, Symbol("after_pulse_S", step) => after_pulse_s)
-        push!(records, Symbol("rt_press_S", step)    => rt_press_S)
-        push!(records, Symbol("rt_pulse_S", step)    => rt_pulse_S)
-        push!(records, Symbol("S_S", step)           => S_S)
-        push!(records, Symbol("collectivity_S", step) => collectivity_S)
-        push!(records, Symbol("resilience_S", step)   => resilience_S)
-        push!(records, Symbol("reactivity_S", step)   => reactivity_S)
-        push!(records, Symbol("sigma_over_min_d_S", step) => sigma_over_min_d_S)
-        push!(records, Symbol("SL_S", step)          => SL_S)
-        push!(records, Symbol("mean_SL_S", step)     => mean_SL_S)
-        push!(records, Symbol("rmed_S", step)        => rmed_S)
+        push!(records, Symbol("after_press_S$(step)") => after_press_s)
+        push!(records, Symbol("after_pulse_S$(step)") => after_pulse_s)
+        push!(records, Symbol("rt_press_S$(step)")    => rt_press_S)
+        push!(records, Symbol("rt_pulse_S$(step)")    => rt_pulse_S)
+        push!(records, Symbol("S_S$(step)")           => count(>(EXTINCTION_THRESHOLD), ustar_s))
+        push!(records, Symbol("collectivity_S$(step)") => collectivity_S)
+        push!(records, Symbol("resilience_S$(step)")   => resilience_S)
+        push!(records, Symbol("reactivity_S$(step)")   => reactivity_S)
+        push!(records, Symbol("sigma_over_min_d_S$(step)") => sigma_over_min_d_S)
+        push!(records, Symbol("SL_S$(step)")          => SL_S)
+        push!(records, Symbol("mean_SL_S$(step)")     => mean_SL_S)
+        push!(records, Symbol("rmed_S$(step)")        => rmed_S)
     end
 
-    # 1: rewiring
-    A1, _, _ = build_topology(S, R; conn = conn, cv_cons = cv_cons, cv_res = cv_res,
-                              modularity = modularity, blocks = blocks, IS = IS, rng = rng)
-    A1 = sparse(A1)
-    K1 = calibrate_zeroK_consumers!(A1, ustar, R)
-    step_metrics(1, A1, K1, ustar, R)
+    # ---- Step 1: rewiring (same conn & IS) ----
+    A1, _, _ = build_topology(S, R; conn=conn, cv_cons=cv_cons, cv_res=cv_res,
+                              modularity=modularity, blocks=blocks, IS=IS, rng=rng)
+    K1 = vcat(K_res_base, zeros(C))
+    ok1, u1 = equilibrate_by_ode(u0, K1, A1; tspan=tspan, cb=cb,
+                                 abstol=abstol, reltol=reltol, saveat=saveat)
+    if !ok1
+        u1 = fill(0.0, S)
+    end
+    _step_metrics(1, A1, u1, K1, R)
 
-    # 2: change connectance
-    new_conn = clamp(conn + (2 * rand(rng) - 1) * 0.35, 0.01, 0.99)
-    A2, _, _ = build_topology(S, R; conn = new_conn, cv_cons = cv_cons, cv_res = cv_res,
-                              modularity = modularity, blocks = blocks, IS = IS, rng = rng)
-    A2 = sparse(A2)
-    K2 = calibrate_zeroK_consumers!(A2, ustar, R)
-    step_metrics(2, A2, K2, ustar, R)
+    # ---- Step 2: change connectance ----
+    new_conn = clamp(conn + (2.0*rand(rng)-1.0)*conn_shift, 0.01, 0.95)
+    A2, _, _ = build_topology(S, R; conn=new_conn, cv_cons=cv_cons, cv_res=cv_res,
+                              modularity=modularity, blocks=blocks, IS=IS, rng=rng)
+    K2 = vcat(K_res_base, zeros(C))
+    ok2, u2 = equilibrate_by_ode(u0, K2, A2; tspan=tspan, cb=cb,
+                                 abstol=abstol, reltol=reltol, saveat=saveat)
+    if !ok2
+        u2 = fill(0.0, S)
+    end
+    _step_metrics(2, A2, u2, K2, R)
 
-    # 3: increase IS
-    A3, _, _ = build_topology(S, R; conn = conn, cv_cons = cv_cons, cv_res = cv_res,
-                              modularity = modularity, blocks = blocks, IS = IS * 10.0, rng = rng)
-    A3 = sparse(A3)
-    K3 = calibrate_zeroK_consumers!(A3, ustar, R)
-    step_metrics(3, A3, K3, ustar, R)
+    # ---- Step 3: increase IS only ----
+    A3, _, _ = build_topology(S, R; conn=conn, cv_cons=cv_cons, cv_res=cv_res,
+                              modularity=modularity, blocks=blocks, IS=IS*IS_factor, rng=rng)
+    K3 = vcat(K_res_base, zeros(C))
+    ok3, u3 = equilibrate_by_ode(u0, K3, A3; tspan=tspan, cb=cb,
+                                 abstol=abstol, reltol=reltol, saveat=saveat)
+    if !ok3
+        u3 = fill(0.0, S)
+    end
+    _step_metrics(3, A3, u3, K3, R)
 
-    # 4: change both
-    new_conn4 = clamp(conn + (2 * rand(rng) - 1) * 0.35, 0.01, 0.99)
-    A4, _, _ = build_topology(S, R; conn = new_conn4, cv_cons = cv_cons, cv_res = cv_res,
-                              modularity = modularity, blocks = blocks, IS = IS * 10.0, rng = rng)
-    A4 = sparse(A4)
-    K4 = calibrate_zeroK_consumers!(A4, ustar, R)
-    step_metrics(4, A4, K4, ustar, R)
+    # ---- Step 4: change both conn and IS ----
+    new_conn4 = clamp(conn + (2.0*rand(rng)-1.0)*conn_shift, 0.01, 0.95)
+    A4, _, _ = build_topology(S, R; conn=new_conn4, cv_cons=cv_cons, cv_res=cv_res,
+                              modularity=modularity, blocks=blocks, IS=IS*IS_factor, rng=rng)
+    K4 = vcat(K_res_base, zeros(C))
+    ok4, u4 = equilibrate_by_ode(u0, K4, A4; tspan=tspan, cb=cb,
+                                 abstol=abstol, reltol=reltol, saveat=saveat)
+    if !ok4
+        u4 = fill(0.0, S)
+    end
+    _step_metrics(4, A4, u4, K4, R)
 
-    # 5: group reassignment
-    R2 = max(1, R - round(Int, 0.1 * S))
-    A5, _, _ = build_topology(S, R2; conn = conn, cv_cons = cv_cons, cv_res = cv_res,
-                              modularity = modularity, blocks = blocks, IS = IS, rng = rng)
-    A5 = sparse(A5)
-    u5 = choose_equilibrium(S, R2; u_mean = 1.0, u_cv_res = 0.5,
-                            u_cv_cons = 0.7, cons_scale = 1.3, rng = rng)
-    K5 = calibrate_zeroK_consumers!(A5, u5, R2)
-    step_metrics(5, A5, K5, u5, R2)
+    # ---- Step 5: group reassignment (R -> R2) ----
+    R2 = max(1, R - round(Int, 0.1*S))
+    C2 = S - R2
+    A5, _, _ = build_topology(S, R2; conn=conn, cv_cons=cv_cons, cv_res=cv_res,
+                              modularity=modularity, blocks=blocks, IS=IS, rng=rng)
+
+    # resample resource K's from the base distribution to fit R2
+    if R2 <= length(K_res_base)
+        K_res2 = K_res_base[sample(rng, 1:length(K_res_base), R2; replace=false)]
+    else
+        K_res2 = K_res_base[sample(rng, 1:length(K_res_base), R2; replace=true)]
+    end
+    K5 = vcat(K_res2, zeros(C2))
+
+    # same initial condition length S (use base u0)
+    ok5, u5 = equilibrate_by_ode(u0, K5, A5; tspan=tspan, cb=cb,
+                                 abstol=abstol, reltol=reltol, saveat=saveat)
+    if !ok5
+        u5 = fill(0.0, S)
+    end
+    _step_metrics(5, A5, u5, K5, R2)
 end
-
 
 # ---------------------------------------------------------
 # Equilibrium checker
@@ -833,4 +871,24 @@ function _sample_degree_sequences(
 
     @assert sum(k_cons) == sum(k_res) == E
     return k_res, k_cons
+end
+
+"""
+    equilibrate_by_ode(u_init::Vector{Float64}, K::Vector{Float64}, A::AbstractMatrix;
+                       tspan=(0.0, 500.0), cb=nothing, abstol=1e-6, reltol=1e-6, saveat=nothing)
+
+Integrate the gLV system from u_init under parameters (K,A) until tspan[2].
+Returns (ok::Bool, u_final::Vector{Float64}), where ok is true if the run
+completed and the final state is finite and nonnegative.
+"""
+function equilibrate_by_ode(u_init, K, A; tspan=(0.0,500.0), cb=nothing,
+                            abstol=1e-6, reltol=1e-6, saveat=nothing)
+    prob = ODEProblem(gLV_rhs!, copy(u_init), tspan, (K, A))
+    sol  = solve(prob, Tsit5();
+                 callback=cb, abstol=abstol, reltol=reltol,
+                 saveat=saveat, dense=false, save_start=false, save_everystep=false)
+    ok = (sol.retcode == ReturnCode.Success)
+    uF = sol.u[end]
+    ok = ok && all(isfinite, uF) && all(uF .>= 0.0)
+    return ok, uF
 end
