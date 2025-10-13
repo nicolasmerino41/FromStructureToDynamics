@@ -20,7 +20,7 @@ function plot_correlations(
         # (:mean_SL, "Mean SL"), 
         # (:rt_press, "RT_press"),
         # (:after_pulse, "after_pulse"),
-        # (:rmed, "rmed"),
+        (:rmed, "rmed"),
         # (:collectivity, "Collectivity"),
         # (:sigma_over_min_d, "σ/min(d)")
     ],
@@ -88,7 +88,11 @@ function plot_correlations(
                 yticklabelsize = 11,
                 limits = ((mn, mx), (mn, mx)),
                 xgridvisible = false,
-                ygridvisible = false
+                ygridvisible = false,
+                titlefont = Makie.to_font("Book Antiqua"),
+                yticklabelfont = Makie.to_font("Book Antiqua"), xticklabelfont = Makie.to_font("Book Antiqua"),
+                ylabelfont = Makie.to_font("Book Antiqua"), xlabelfont = Makie.to_font("Book Antiqua"),
+                subtitlefont = Makie.to_font("Book Antiqua")
             )
 
             # Plot scatter points
@@ -113,7 +117,8 @@ function plot_correlations(
                         position = (x_pos, mn),
                         align = align,
                         fontsize = 12,
-                        color = :black
+                        color = :black,
+                        font = Makie.to_font("Book Antiqua")
                     )
                 end
             else
@@ -125,7 +130,8 @@ function plot_correlations(
                         position = (mx, mn),
                         align = (:right, :bottom),
                         fontsize = 10,
-                        color = :black
+                        color = :black,
+                        font = Makie.to_font("Book Antiqua")
                     )
                 end
             end
