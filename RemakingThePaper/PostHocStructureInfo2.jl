@@ -142,7 +142,7 @@ function report_structure_range_from_results(df::DataFrame)
 end
 
 # 1) sample plots
-plot_sample_distributions_from_results(sim_results; nsample=6)
+plot_sample_distributions_from_results(sim_resultss; nsample=6)
 
 # 2) realized-structure range summary (prints to REPL)
 report_structure_range_from_results(sim_results)
