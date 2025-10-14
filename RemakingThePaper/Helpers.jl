@@ -89,63 +89,10 @@ function build_callbacks(S::Int, EXTINCTION_THRESHOLD::Float64)
 end
 
 # ---------------------------------------------------------
-# FAST single-phase PRESS (switch K at t=0; one solve)
+# PRESS (with optional plotting, colored by role + delta in title)
 # ---------------------------------------------------------
 function simulate_press_perturbation_glv(
-    u0, p, tspan, _t_perturb, delta, R;
-    solver = Tsit5(),
-    cb = nothing,
-    abstol = 1e-6,
-    reltol = 1e-6,
-    saveat = range(tspan[1], tspan[2], length = 201),  # approx. 200 samples
-    dense = false,
-    save_everystep = false,
-    save_start = false,
-    save_end = true
-)
-    before_persistence = count(>(EXTINCTION_THRESHOLD), u0) / length(u0)
-
-    K, A = p
-    K_press = vcat(K[1:R] .* (1 .- delta), K[R + 1:end])
-    p2 = (K_press, A)
-
-    prob = ODEProblem(gLV_rhs!, u0, (tspan[1], tspan[2]), p2)
-    sol = solve(prob, solver;
-        callback = cb,
-        abstol = abstol,
-        reltol = reltol,
-        saveat = saveat,
-        dense = dense,
-        save_everystep = save_everystep,
-        save_start = save_start,
-        save_end = save_end
-    )
-
-    post = sol.u[end]
-    after_persistence = count(>(EXTINCTION_THRESHOLD), post) / length(post)
-
-    # Return times: first time each species is within 10% of final
-    n = length(post)
-    rts = fill(Float64(NaN), n)
-    @inbounds for i in 1:n
-        target = post[i]
-        for (t, u) in zip(sol.t, sol.u)
-            if abs(u[i] - target) / (abs(target) + 1e-8) < 0.10
-                rts[i] = t - tspan[1]
-                break
-            end
-        end
-    end
-
-    return rts, before_persistence, after_persistence, post
-end
-
-
-# ---------------------------------------------------------
-# FAST single-phase PULSE (start from pulsed state at t=0)
-# ---------------------------------------------------------
-function simulate_pulse_perturbation_glv(
-    u0, p, tspan, _t_pulse, delta;
+    u0, p, tspan, t_perturb::Real, delta::Real, R::Int;
     solver = Tsit5(),
     cb = nothing,
     abstol = 1e-6,
@@ -154,36 +101,194 @@ function simulate_pulse_perturbation_glv(
     dense = false,
     save_everystep = false,
     save_start = false,
-    save_end = true
+    save_end = true,
+    plot_simulation::Bool = false,
+    title::AbstractString = ""
 )
+    K, A = p
     before_persistence = count(>(EXTINCTION_THRESHOLD), u0) / length(u0)
-    pulsed = u0 .* (1 .- delta)
 
-    prob = ODEProblem(gLV_rhs!, pulsed, (tspan[1], tspan[2]), p)
-    sol = solve(prob, solver;
-        callback = cb,
-        abstol = abstol,
-        reltol = reltol,
-        saveat = saveat,
-        dense = dense,
-        save_everystep = save_everystep,
-        save_start = save_start,
-        save_end = save_end
-    )
+    # --- PRE (only simulated when plotting is requested) ---
+    u_pre_end = u0
+    pre_sol = nothing
+    if plot_simulation && t_perturb > tspan[1]
+        prob_pre = ODEProblem(gLV_rhs!, u0, (tspan[1], t_perturb), (K, A))
+        pre_sol  = solve(prob_pre, solver;
+                         callback = cb, abstol = abstol, reltol = reltol,
+                         saveat = saveat, dense = dense, save_everystep = save_everystep,
+                         save_start = save_start, save_end = true)
+        u_pre_end = pre_sol.u[end]
+    end
 
-    post = sol.u[end]
+    # --- POST (press: reduce K for resources) ---
+    K_press = vcat(K[1:R] .* (1 .- delta), K[R+1:end])
+    p2 = (K_press, A)
+    prob_post = ODEProblem(gLV_rhs!, u_pre_end, (max(tspan[1], t_perturb), tspan[2]), p2)
+    post_sol  = solve(prob_post, solver;
+                      callback = cb, abstol = abstol, reltol = reltol,
+                      saveat = saveat, dense = dense, save_everystep = save_everystep,
+                      save_start = false, save_end = true)
+
+    post = post_sol.u[end]
     after_persistence = count(>(EXTINCTION_THRESHOLD), post) / length(post)
 
+    # Return times (post-phase): first time within 10% of final
     n = length(post)
     rts = fill(Float64(NaN), n)
     @inbounds for i in 1:n
         target = post[i]
-        for (t, u) in zip(sol.t, sol.u)
+        for (t, u) in zip(post_sol.t, post_sol.u)
             if abs(u[i] - target) / (abs(target) + 1e-8) < 0.10
-                rts[i] = t - tspan[1]
+                rts[i] = t - max(tspan[1], t_perturb)
                 break
             end
         end
+    end
+
+    # --- PLOTTING ---
+    if plot_simulation
+        full_title = isempty(title) ? "PRESS delta=$(delta)" : "PRESS $(title) delta=$(delta)"
+        S = length(u0)
+        fig = Figure(size = (1100, 560))
+        Label(fig[0, 1], full_title; fontsize = 18, font = :bold, halign = :left)
+
+        # Pre panel
+        ax_pre = Axis(fig[1, 1];
+            title = "Pre (t  [$(tspan[1]), $(t_perturb)])",
+            xlabel = "time", ylabel = "abundance",
+            xgridvisible=false, ygridvisible=false
+        )
+        if pre_sol === nothing
+            # show a point at t_perturb with group colors
+            if R > 0
+                scatter!(ax_pre, fill(t_perturb, R), u0[1:R];  markersize=2, color=:blue)
+            end
+            if R < S
+                scatter!(ax_pre, fill(t_perturb, S-R), u0[(R+1):S]; markersize=2, color=:red)
+            end
+        else
+            for s in 1:S
+                ys = (uu -> uu[s]).(pre_sol.u)
+                lines!(ax_pre, pre_sol.t, ys; transparency=true, alpha=0.6, color = (s <= R ? :blue : :red))
+            end
+        end
+
+        # Post panel
+        ax_post = Axis(fig[1, 2];
+            title = "Post (press) (t  [$(max(tspan[1], t_perturb)), $(tspan[2])])",
+            xlabel = "time", ylabel = "abundance",
+            xgridvisible=false, ygridvisible=false
+        )
+        for s in 1:S
+            ys = (uu -> uu[s]).(post_sol.u)
+            lines!(ax_post, post_sol.t, ys; transparency=true, alpha=0.6, color = (s <= R ? :blue : :red))
+        end
+
+        display(fig)
+    end
+
+    return rts, before_persistence, after_persistence, post
+end
+
+# ---------------------------------------------------------
+# PULSE (with optional plotting, colored by role + delta in title)
+# (Infers R from K: resources have K>0, consumers K=0)
+# ---------------------------------------------------------
+function simulate_pulse_perturbation_glv(
+    u0, p, tspan, t_pulse::Real, delta::Real;
+    solver = Tsit5(),
+    cb = nothing,
+    abstol = 1e-6,
+    reltol = 1e-6,
+    saveat = range(tspan[1], tspan[2], length = 201),
+    dense = false,
+    save_everystep = false,
+    save_start = false,
+    save_end = true,
+    plot_simulation::Bool = false,
+    title::AbstractString = ""
+)
+    K, A = p
+    S = length(u0)
+    # infer R from K (>0 for resources, =0 for consumers in our framework)
+    R = count(>(0.0), K)
+
+    before_persistence = count(>(EXTINCTION_THRESHOLD), u0) / length(u0)
+
+    # --- PRE (only simulated when plotting is requested) ---
+    u_pre_end = u0
+    pre_sol = nothing
+    if plot_simulation && t_pulse > tspan[1]
+        prob_pre = ODEProblem(gLV_rhs!, u0, (tspan[1], t_pulse), (K, A))
+        pre_sol  = solve(prob_pre, solver;
+                         callback = cb, abstol = abstol, reltol = reltol,
+                         saveat = saveat, dense = dense, save_everystep = save_everystep,
+                         save_start = save_start, save_end = true)
+        u_pre_end = pre_sol.u[end]
+    end
+
+    # --- POST (pulse: instant drop at t_pulse, same K,A)
+    pulsed = u_pre_end .* (1 .- delta)
+    prob_post = ODEProblem(gLV_rhs!, pulsed, (max(tspan[1], t_pulse), tspan[2]), (K, A))
+    post_sol  = solve(prob_post, solver;
+                      callback = cb, abstol = abstol, reltol = reltol,
+                      saveat = saveat, dense = dense, save_everystep = save_everystep,
+                      save_start = false, save_end = true)
+
+    post = post_sol.u[end]
+    after_persistence = count(>(EXTINCTION_THRESHOLD), post) / length(post)
+
+    # Return times (post-phase)
+    n = length(post)
+    rts = fill(Float64(NaN), n)
+    @inbounds for i in 1:n
+        target = post[i]
+        for (t, u) in zip(post_sol.t, post_sol.u)
+            if abs(u[i] - target) / (abs(target) + 1e-8) < 0.10
+                rts[i] = t - max(tspan[1], t_pulse)
+                break
+            end
+        end
+    end
+
+    # --- PLOTTING ---
+    if plot_simulation
+        full_title = isempty(title) ? "PULSE delta=$(delta)" : "PULSE $(title) delta=$(delta)"
+        fig = Figure(size = (1100, 560))
+        Label(fig[0, 1], full_title; fontsize = 18, font = :bold, halign = :left)
+
+        # Pre panel
+        ax_pre = Axis(fig[1, 1];
+            title = "Pre (t  [$(tspan[1]), $(t_pulse)])",
+            xlabel = "time", ylabel = "abundance",
+            xgridvisible=false, ygridvisible=false
+        )
+        if pre_sol === nothing
+            if R > 0
+                scatter!(ax_pre, fill(t_pulse, R), u0[1:R];        markersize=2, color=:blue)
+            end
+            if R < S
+                scatter!(ax_pre, fill(t_pulse, S-R), u0[(R+1):S]; markersize=2, color=:red)
+            end
+        else
+            for s in 1:S
+                ys = (uu -> uu[s]).(pre_sol.u)
+                lines!(ax_pre, pre_sol.t, ys; transparency=true, alpha=0.6, color = (s <= R ? :blue : :red))
+            end
+        end
+
+        # Post panel
+        ax_post = Axis(fig[1, 2];
+            title = "Post (pulse) (t [$(max(tspan[1], t_pulse)), $(tspan[2])])",
+            xlabel = "time", ylabel = "abundance",
+            xgridvisible=false, ygridvisible=false
+        )
+        for s in 1:S
+            ys = (uu -> uu[s]).(post_sol.u)
+            lines!(ax_post, post_sol.t, ys; transparency=true, alpha=0.6, color = (s <= R ? :blue : :red))
+        end
+
+        display(fig)
     end
 
     return rts, before_persistence, after_persistence, post
@@ -462,79 +567,93 @@ function choose_equilibrium(
 end
 
 """
-    calibrate_zeroK_consumers!(A, u, R) -> K
+    calibrate_consumerK!(A, u, R) -> K
 
 Enforce K_cons = 0 and keep u* as equilibrium by rescaling each consumer row i so (A*u)[i] = u[i].
 Mirrors the same factor on the reciprocal entries A[j,i] to preserve pairwise magnitudes.
 Returns K with K[1:R] set so that g(u*) = 0 for resources, and K[R+1:end] = 0.
 """
-function calibrate_zeroK_consumers!(A::AbstractMatrix, u::AbstractVector, R::Int)
-    S = size(A, 1)
+# Replaces calibrate_zeroK_consumers!
+# Sets every consumer i (i > R) to have intrinsic growth k_cons (default 0.0)
+# and rescales its consumer->resource row of A so that at u:
+#   0 = u[i] * (k_cons - u[i] + (A*u)[i])  =>  (A*u)[i] = u[i] - k_cons
+function calibrate_consumer_K!(A::AbstractMatrix, u::AbstractVector, R::Int;
+                               k_cons::Float64 = 0.0, min_link::Float64 = 1e-8)
+    S = size(A,1)
     C = S - R
     @assert length(u) == S
+    @assert R >= 1 "R must be at least 1 (need at least one resource)."
 
-    # Scale each consumer row
-    Au = A * u
+    # Ensure each consumer has at least one prey edge
     for ic in 1:C
         i = R + ic
-        num = u[i]
-        den = Au[i]
-        if den <= 0
-            # Degenerate case (should not happen with positive edges); patch with one prey
-            jr = argmax(u[1:R])
-            A[i, jr] = max(A[i, jr], 1e-6)
-            A[jr, i] = -A[i, jr]
-            den = (A[i, 1:R]' * u[1:R])
-        end
-        s = num / den
-        # Rescale consumer->resource and reciprocal resource->consumer entries
-        @inbounds for jr in 1:R
-            A[i, jr] *= s
-            A[jr, i] *= s
+        if all(iszero, A[i, 1:R])
+            jr = argmax(view(u, 1:R))
+            w  = max(min_link, abs(randn()) * min_link)
+            A[i, jr] =  w
+            A[jr, i] = -w
         end
     end
 
-    # Recompute after scaling
+    # Scale each consumer row so (A*u)[i] = u[i] - k_cons
     Au = A * u
+    for ic in 1:C
+        i = R + ic
+        num = u[i] - k_cons
+        den = Au[i]
+        if den <= 0
+            # fallback: only resource block contribution
+            den = dot(view(A, i, 1:R), view(u, 1:R))
+            if den <= 0
+                jr = argmax(view(u, 1:R))
+                A[i, jr] = max(A[i, jr], min_link)
+                A[jr, i] = -A[i, jr]
+                den = dot(view(A, i, 1:R), view(u, 1:R))
+                den = den <= 0 ? min_link : den
+            end
+        end
+        s = num / den
+        @inbounds for jr in 1:R
+            if A[i, jr] != 0.0
+                A[i, jr] *= s
+                A[jr, i] = -A[i, jr]
+            end
+        end
+    end
 
-    # K for resources: K_j = u_j - (A*u)_j
-    # K for consumers: 0
-    K = similar(u)
+    # Recompute K: resources from (I - A)u, consumers fixed to k_cons
+    Au = A * u
+    K  = similar(u)
     @inbounds begin
         for j in 1:R
             K[j] = u[j] - Au[j]
         end
-        for i in (R + 1):S
-            K[i] = 0.0
+        for i in (R+1):S
+            K[i] = k_cons
         end
     end
     return K
 end
 
-
 # ---------------------------------------------------------
 # Stabilization routine
 # ---------------------------------------------------------
 function stabilize!(A::Matrix{Float64}, u::Vector{Float64}, K::Vector{Float64};
-    margin::Float64 = 0.05,
-    max_iter::Int = 30,
-    shrink::Float64 = 0.8
-)
+    margin::Float64=0.05, max_iter::Int=50, shrink::Float64=0.7)
     alpha = 1.0
     for _ in 1:max_iter
         J = jacobian_at_equilibrium(A, u)
-        lambda_val = maximum(real, eigvals(J))
-        if lambda_val <= -margin
-            return alpha, lambda_val
+        lambda = maximum(real, eigvals(J))
+        if lambda <= -margin
+            return alpha, lambda
         end
         A .*= shrink
         alpha *= shrink
         K .= (I - A) * u
     end
-    lambda_val = maximum(real, eigvals(jacobian_at_equilibrium(A, u)))
-    return alpha, lambda_val
+    lambda = maximum(real, eigvals(jacobian_at_equilibrium(A, u)))
+    return alpha, lambda
 end
-
 
 """
     stabilize_and_recalibrate!(A, u, R; margin)
@@ -543,37 +662,87 @@ Calls `stabilize!` (which may rescale A), then re-enforces zero-K consumers
 and recomputes resource K so that u* remains an exact equilibrium with K_cons = 0.
 Returns (K, alpha, lambda_max).
 """
-function stabilize_and_recalibrate!(A::AbstractMatrix, u::AbstractVector, R::Int; margin::Float64)
-    # First pass K (used only temporarily)
-    K_tmp = calibrate_zeroK_consumers!(A, u, R)
-    alpha, lambda_val = stabilize!(A, u, K_tmp; margin = margin)
+function stabilize_and_recalibrate!(A::AbstractMatrix, u::AbstractVector, R::Int;
+                                    margin::Float64, k_cons::Float64 = 0.0,
+                                    max_iter::Int = 30, shrink::Float64 = 0.8)
+    # First calibrate with the requested consumer K
+    K_tmp = calibrate_consumer_K!(A, u, R; k_cons=k_cons)
 
-    # After stabilize! (A changed): enforce again
-    K = calibrate_zeroK_consumers!(A, u, R)
-    return K, alpha, lambda_val
+    # Shrink A until the Jacobian is to the left of -margin
+    alpha = 1.0
+    for _ in 1:max_iter
+        J = Diagonal(u) * (A - I)
+        lambda = maximum(real, eigvals(J))
+        if lambda <= -margin
+            # Final recalc of K under the achieved A
+            K = calibrate_consumer_K!(A, u, R; k_cons=k_cons)
+            return K, alpha, lambda
+        end
+        A .*= shrink
+        alpha *= shrink
+        # keep K consistent with current A and target k_cons
+        K_tmp = calibrate_consumer_K!(A, u, R; k_cons=k_cons)
+    end
+    # Give up but still return current lambda, alpha, and K
+    J = Diagonal(u) * (A - I)
+    lambda = maximum(real, eigvals(J))
+    K = calibrate_consumer_K!(A, u, R; k_cons=k_cons)
+    return K, alpha, lambda
 end
 
+function compute_resilience(u::AbstractVector, A::AbstractMatrix;
+                            extinct_threshold::Real=EXTINCTION_THRESHOLD,
+                            extant_only::Bool=true)
+    J = Diagonal(u) * (A - I)
+    if extant_only
+        Iext = findall(>(extinct_threshold), u)
+        isempty(Iext) && return 0.0  # degenerate: everything dead
+        J = @view J[Iext, Iext]
+    end
+    return maximum(real, eigvals(J))
+end
+
+function compute_reactivity(u::AbstractVector, A::AbstractMatrix;
+                            extinct_threshold::Real=EXTINCTION_THRESHOLD,
+                            extant_only::Bool=true)
+    J = Diagonal(u) * (A - I)
+    if extant_only
+        Iext = findall(>(extinct_threshold), u)
+        isempty(Iext) && return 0.0
+        J = @view J[Iext, Iext]
+    end
+    Jsym = (J + J')/2
+    return maximum(real, eigvals(Jsym))
+end
 
 # ---------------------------------------------------------
 # Metric extraction for the "full" community
 # ---------------------------------------------------------
 # Fast solver configuration; rmed disabled by default
-function extract_metrics(u0::Vector{Float64}, K::Vector{Float64}, A::AbstractMatrix;
-                         R::Int,
-                         tspan = (0.0, 200.0),
-                         tpert = 0.0,
-                         delta = 1.0,
-                         cb = nothing,
-                         abstol = 1e-6,
-                         reltol = 1e-6,
-                         saveat = range(tspan[1], tspan[2], length = 201),
-                         compute_rmed::Bool = false)
+function extract_metrics(
+    u0::Vector{Float64}, K::Vector{Float64}, A::AbstractMatrix;
+    R::Int,
+    tspan = (0.0, 200.0),
+    tpert = 0.0,
+    delta = 1.0,
+    cb = nothing,
+    abstol = 1e-6,
+    reltol = 1e-6,
+    saveat = range(tspan[1], tspan[2], length = 201),
+    compute_rmed::Bool = false,
+    plot_simulation::Bool = false,
+    title::AbstractString = "Full"
+)
 
     J = jacobian_at_equilibrium(A, u0)
 
     S_full = count(>(EXTINCTION_THRESHOLD), u0)
-    resilience_full  = maximum(real, eigvals(Matrix(J)))              # dense eig on small J
-    reactivity_full  = maximum(real, eigvals(Matrix((J + J') / 2)))   # symmetric part
+    resilience_full  = compute_resilience(u0, A; extant_only=false)
+    resilienceE_ext   = compute_resilience(u0, A; extant_only=true) 
+    
+    reactivity_full  = compute_reactivity(u0, A; extant_only=false)
+    reactivityE_full   = compute_reactivity(u0, A; extant_only=true)
+
     collectivity_full = compute_collectivity(Matrix(A))
 
     SL_full = diag(J) .|> x -> x == 0.0 ? 0.0 : -1 / x
@@ -586,20 +755,28 @@ function extract_metrics(u0::Vector{Float64}, K::Vector{Float64}, A::AbstractMat
 
     # --- Press perturbation ---
     rt_press_vec, _, after_press, _ =
-        simulate_press_perturbation_glv(u0, (K, A), tspan, tpert, delta, R;
-                                        cb = cb, abstol = abstol, reltol = reltol, saveat = saveat)
+        simulate_press_perturbation_glv(
+            u0, (K, A), tspan, tpert, delta, R;
+            cb = cb, abstol = abstol, reltol = reltol, saveat = saveat,
+            plot_simulation = plot_simulation, title = "Press simulations: " * title
+        )
     rt_press_full = mean(skipmissing(rt_press_vec))
 
     # --- Pulse perturbation ---
     rt_pulse_vec, _, after_pulse, _ =
-        simulate_pulse_perturbation_glv(u0, (K, A), tspan, tpert, delta;
-                                        cb = cb, abstol = abstol, reltol = reltol, saveat = saveat)
+        simulate_pulse_perturbation_glv(
+            u0, (K, A), tspan, tpert, delta;
+            cb = cb, abstol = abstol, reltol = reltol, saveat = saveat,
+            plot_simulation = plot_simulation, title = "Pulse simulations: " * title
+        )
     rt_pulse_full = mean(skipmissing(rt_pulse_vec))
 
     return (
         S_full = S_full,
         resilience_full = resilience_full,
+        resilienceE_full = resilienceE_ext,
         reactivity_full = reactivity_full,
+        reactivityE_full = reactivityE_full,
         collectivity_full = collectivity_full,
         SL_full = SL_full,
         mean_SL_full = mean_SL_full,
@@ -620,132 +797,266 @@ end
         compute_rmed_steps::Bool=false, rng=Random.default_rng())
 
 Builds 5 modified models and, for each, recomputes the equilibrium by integrating
-the ODE with the same demographics: K_res held from base, K_cons=0 (steps 1–4).
+the ODE with the same demographics: K_res held from base, K_cons=0 (steps 1-4).
 Step 5 reassigns groups (R -> R2) and resamples a resource-K vector from the base distribution.
 
 Appends *_S1..*_S5 metrics to `records`.
 """
-function modification_ladder!(records::Vector{Pair{Symbol,Any}},
-                              u0::Vector{Float64}, A0::Matrix{Float64}, K0::Vector{Float64},
-                              S::Int, R::Int;
-                              conn::Float64, cv_cons::Float64, cv_res::Float64,
-                              modularity::Float64, blocks::Int, IS::Float64,
-                              tspan=(0.0,500.0), tpert=250.0, delta=1.0,
-                              cb=nothing, abstol=1e-6, reltol=1e-6, saveat=nothing,
-                              compute_rmed_steps::Bool=false,
-                              IS_factor::Float64=10.0,
-                              conn_shift::Float64=0.35,
-                              rng = Random.default_rng())
+function modification_ladder!(
+    records::Vector{Pair{Symbol,Any}},
+    ustar::Vector{Float64}, A::AbstractMatrix, K::Vector{Float64},
+    S::Int, R::Int;
+    # Topology controls
+    conn::Float64, cv_cons::Float64, cv_res::Float64,
+    modularity::Float64, blocks::Int, IS::Float64,
+    # ODE / measurement controls
+    tspan=(0.0, 500.0), tpert=0.0, delta=1.0,
+    cb=nothing, abstol=1e-6, reltol=1e-6, saveat=range(tspan[1], tspan[2], length=201),
+    compute_rmed_steps::Bool=false,
+    rng = Random.default_rng(),
+    # NEW: choose which step numbers to run (from 1..8). Kept as their original ids.
+    steps_to_run::AbstractVector{Int} = 1:8,
+    plot_simulation::Bool = false,
+    title::AbstractString = "Step",
+    preserve_pair_symmetry = false,
+    consumer_k::Float64 = 0.0
+)
+    EXT = EXTINCTION_THRESHOLD
+    S0  = S
 
-    C = S - R
-    K_res_base = copy(K0[1:R])  # keep resource K's from the base model
+    # ---------- helpers ----------
+    settle_equilibrium = function(u_init::Vector{Float64}, A_step::AbstractMatrix, K_step::Vector{Float64})
+        # returns (u_s, analytic::Bool)
+        return equilibrium_for(A_step, K_step, u_init, tspan, cb; abstol=abstol, reltol=reltol, saveat=saveat)
+    end
 
-    # local helper: measure all step metrics given (A_s, u*_s, K_s, R_s)
-    function _step_metrics(step::Int, A_s::Matrix{Float64}, ustar_s::Vector{Float64},
-                           K_s::Vector{Float64}, R_s::Int)
-        J_s = jacobian_at_equilibrium(A_s, ustar_s)
 
-        # Press perturbation
+    function step_metrics!(step::Int, u_s::Vector{Float64}, K_s::Vector{Float64}, A_s::AbstractMatrix, R_s::Int)
+        J_s = jacobian_at_equilibrium(A_s, u_s)
+
+        # ---- pre-perturbation persistence at this step
+        init_survival = count(>(EXT), u_s) / S0
+        push!(records, Symbol("init_survival_S$(step)") => init_survival)
+
+        # full vs extant-only stability/reactivity
+        res_full = compute_resilience(u_s, A_s; extant_only=false)
+        res_ext  = compute_resilience(u_s, A_s; extant_only=true)
+        rea_full = compute_reactivity(u_s, A_s; extant_only=false)
+        rea_ext  = compute_reactivity(u_s, A_s; extant_only=true)
+
+        # PRESS: mean RT over species extant at start
         rt_press_vec, _, after_press_s, _ =
-            simulate_press_perturbation_glv(ustar_s, (K_s, A_s), tspan, tpert, delta, R_s;
-                                            cb=cb, abstol=abstol, reltol=reltol, saveat=saveat)
-        rt_press_S = mean(skipmissing(rt_press_vec))
+            simulate_press_perturbation_glv(
+                u_s, (K_s, A_s), tspan, tpert, delta, R_s;
+                cb=cb, abstol=abstol, reltol=reltol, saveat=saveat,
+                plot_simulation=plot_simulation, title="Press simulations: " * title * " $(step)"
+            )
+        mask_press = u_s .> EXT
+        rt_press_vals = [rt_press_vec[i] for i in eachindex(u_s)
+                         if mask_press[i] && isfinite(rt_press_vec[i]) && !ismissing(rt_press_vec[i])]
+        rt_press_S = isempty(rt_press_vals) ? NaN : mean(rt_press_vals)
 
-        # Pulse perturbation
+        # PULSE: mean RT over species extant at start
         rt_pulse_vec, _, after_pulse_s, _ =
-            simulate_pulse_perturbation_glv(ustar_s, (K_s, A_s), tspan, tpert, delta;
-                                            cb=cb, abstol=abstol, reltol=reltol, saveat=saveat)
-        rt_pulse_S = mean(skipmissing(rt_pulse_vec))
+            simulate_pulse_perturbation_glv(
+                u_s, (K_s, A_s), tspan, tpert, delta;
+                cb=cb, abstol=abstol, reltol=reltol, saveat=saveat,
+                plot_simulation=plot_simulation, title="Pulse simulations: " * title * " $(step)"
+            )
+        mask_pulse = u_s .> EXT
+        rt_pulse_vals = [rt_pulse_vec[i] for i in eachindex(u_s)
+                         if mask_pulse[i] && isfinite(rt_pulse_vec[i]) && !ismissing(rt_pulse_vec[i])]
+        rt_pulse_S = isempty(rt_pulse_vals) ? NaN : mean(rt_pulse_vals)
 
-        collectivity_S = compute_collectivity(A_s)
-        resilience_S   = maximum(real, eigvals(J_s))
-        reactivity_S   = maximum(real, eigvals((J_s + J_s')/2))
-        sigma_over_min_d_S = sigma_over_min_d(A_s, J_s)
-        SL_S = diag(J_s) .|> x -> x == 0.0 ? 0.0 : -1.0/x
+        S_S = count(>(EXT), u_s)
+        collectivity_S = compute_collectivity(Matrix(A_s))
+        sigma_over_min_d_S = sigma_over_min_d(Matrix(A_s), Matrix(J_s))
+        SL_S = diag(J_s) .|> x -> x == 0.0 ? 0.0 : -1/x
         mean_SL_S = mean(SL_S)
-        rmed_S = compute_rmed_steps ? analytical_median_return_rate(J_s; t=1.0) : NaN
+        rmed_S = compute_rmed_steps ? analytical_median_return_rate(Matrix(J_s); t=1.0) : median(-diag(J_s))
 
-        push!(records, Symbol("after_press_S$(step)") => after_press_s)
-        push!(records, Symbol("after_pulse_S$(step)") => after_pulse_s)
-        push!(records, Symbol("rt_press_S$(step)")    => rt_press_S)
-        push!(records, Symbol("rt_pulse_S$(step)")    => rt_pulse_S)
-        push!(records, Symbol("S_S$(step)")           => count(>(EXTINCTION_THRESHOLD), ustar_s))
-        push!(records, Symbol("collectivity_S$(step)") => collectivity_S)
-        push!(records, Symbol("resilience_S$(step)")   => resilience_S)
-        push!(records, Symbol("reactivity_S$(step)")   => reactivity_S)
+        push!(records, Symbol("after_press_S$(step)")      => after_press_s)
+        push!(records, Symbol("after_pulse_S$(step)")      => after_pulse_s)
+        push!(records, Symbol("rt_press_S$(step)")         => rt_press_S)
+        push!(records, Symbol("rt_pulse_S$(step)")         => rt_pulse_S)
+        push!(records, Symbol("S_S$(step)")                => S_S)
+        push!(records, Symbol("collectivity_S$(step)")     => collectivity_S)
+        push!(records, Symbol("resilience_S$(step)")       => res_full)
+        push!(records, Symbol("resilienceE_S$(step)")      => res_ext)
+        push!(records, Symbol("reactivity_S$(step)")       => rea_full)
+        push!(records, Symbol("reactivityE_S$(step)")      => rea_ext)
         push!(records, Symbol("sigma_over_min_d_S$(step)") => sigma_over_min_d_S)
-        push!(records, Symbol("SL_S$(step)")          => SL_S)
-        push!(records, Symbol("mean_SL_S$(step)")     => mean_SL_S)
-        push!(records, Symbol("rmed_S$(step)")        => rmed_S)
+        push!(records, Symbol("SL_S$(step)")               => SL_S)
+        push!(records, Symbol("mean_SL_S$(step)")          => mean_SL_S)
+        push!(records, Symbol("rmed_S$(step)")             => rmed_S)
+        return nothing
     end
 
-    # ---- Step 1: rewiring (same conn & IS) ----
-    A1, _, _ = build_topology(S, R; conn=conn, cv_cons=cv_cons, cv_res=cv_res,
-                              modularity=modularity, blocks=blocks, IS=IS, rng=rng)
-    K1 = vcat(K_res_base, zeros(C))
-    ok1, u1 = equilibrate_by_ode(u0, K1, A1; tspan=tspan, cb=cb,
-                                 abstol=abstol, reltol=reltol, saveat=saveat)
-    if !ok1
-        u1 = fill(0.0, S)
+    # magnitude field applier (keeps CR sign pairing if requested)
+    function apply_magnitudes_with_sign!(Aout::AbstractMatrix, Ain::AbstractMatrix, M::AbstractMatrix, R::Int;
+                                         preserve_pairs::Bool=false)
+        S = size(Ain,1)
+        fill!(Aout, 0.0)
+        if preserve_pairs
+            for i in (R+1):S, j in 1:R
+                if Ain[i,j] != 0.0 || Ain[j,i] != 0.0
+                    m = (M[i,j] + M[j,i]) / 2
+                    if m > 0
+                        Aout[i,j] =  +m
+                        Aout[j,i] =  -m
+                    end
+                end
+            end
+        else
+            @inbounds for i in 1:S, j in 1:S
+                if Ain[i,j] != 0.0
+                    Aout[i,j] = sign(Ain[i,j]) * M[i,j]
+                end
+            end
+        end
+        return Aout
     end
-    _step_metrics(1, A1, u1, K1, R)
 
-    # ---- Step 2: change connectance ----
-    new_conn = clamp(conn + (2.0*rand(rng)-1.0)*conn_shift, 0.01, 0.95)
-    A2, _, _ = build_topology(S, R; conn=new_conn, cv_cons=cv_cons, cv_res=cv_res,
-                              modularity=modularity, blocks=blocks, IS=IS, rng=rng)
-    K2 = vcat(K_res_base, zeros(C))
-    ok2, u2 = equilibrate_by_ode(u0, K2, A2; tspan=tspan, cb=cb,
-                                 abstol=abstol, reltol=reltol, saveat=saveat)
-    if !ok2
-        u2 = fill(0.0, S)
+    # ---------- step constructors (always derive A_s from ORIGINAL A) ----------
+    function A_step1_rowmean(A::AbstractMatrix)
+        S = size(A,1); M = zeros(eltype(A), S, S)
+        @inbounds for i in 1:S
+            mags = Float64[]
+            for j in 1:S
+                if A[i,j] != 0.0; push!(mags, abs(A[i,j])); end
+            end
+            if !isempty(mags)
+                m_mean = mean(mags)
+                for j in 1:S
+                    if A[i,j] != 0.0; M[i,j] = m_mean; end
+                end
+            end
+        end
+        A1 = similar(A); apply_magnitudes_with_sign!(A1, A, M, R; preserve_pairs=preserve_pair_symmetry)
     end
-    _step_metrics(2, A2, u2, K2, R)
 
-    # ---- Step 3: increase IS only ----
-    A3, _, _ = build_topology(S, R; conn=conn, cv_cons=cv_cons, cv_res=cv_res,
-                              modularity=modularity, blocks=blocks, IS=IS*IS_factor, rng=rng)
-    K3 = vcat(K_res_base, zeros(C))
-    ok3, u3 = equilibrate_by_ode(u0, K3, A3; tspan=tspan, cb=cb,
-                                 abstol=abstol, reltol=reltol, saveat=saveat)
-    if !ok3
-        u3 = fill(0.0, S)
+    function A_step2_rolemean(A::AbstractMatrix)
+        S = size(A,1); M = zeros(eltype(A), S, S)
+        # consumer -> resource magnitudes
+        mags_cons = Float64[]
+        @inbounds for i in (R+1):S, j in 1:R
+            if A[i,j] != 0.0; push!(mags_cons, abs(A[i,j])); end
+        end
+        mC = isempty(mags_cons) ? 0.0 : mean(mags_cons)
+        # resource -> consumer magnitudes
+        mags_res = Float64[]
+        @inbounds for i in 1:R, j in (R+1):S
+            if A[i,j] != 0.0; push!(mags_res, abs(A[i,j])); end
+        end
+        mR = isempty(mags_res) ? 0.0 : mean(mags_res)
+        @inbounds begin
+            for i in (R+1):S, j in 1:R
+                if A[i,j] != 0.0; M[i,j] = mC; end
+            end
+            for i in 1:R, j in (R+1):S
+                if A[i,j] != 0.0; M[i,j] = mR; end
+            end
+        end
+        A2 = similar(A); apply_magnitudes_with_sign!(A2, A, M, R; preserve_pairs=preserve_pair_symmetry)
     end
-    _step_metrics(3, A3, u3, K3, R)
 
-    # ---- Step 4: change both conn and IS ----
-    new_conn4 = clamp(conn + (2.0*rand(rng)-1.0)*conn_shift, 0.01, 0.95)
-    A4, _, _ = build_topology(S, R; conn=new_conn4, cv_cons=cv_cons, cv_res=cv_res,
-                              modularity=modularity, blocks=blocks, IS=IS*IS_factor, rng=rng)
-    K4 = vcat(K_res_base, zeros(C))
-    ok4, u4 = equilibrate_by_ode(u0, K4, A4; tspan=tspan, cb=cb,
-                                 abstol=abstol, reltol=reltol, saveat=saveat)
-    if !ok4
-        u4 = fill(0.0, S)
+    function A_step3_globalmean(A::AbstractMatrix)
+        S = size(A,1)
+        mags_all = Float64[]
+        @inbounds for i in 1:S, j in 1:S
+            if A[i,j] != 0.0; push!(mags_all, abs(A[i,j])); end
+        end
+        mG = isempty(mags_all) ? 0.0 : mean(mags_all)
+        M = zeros(eltype(A), S, S)
+        @inbounds for i in 1:S, j in 1:S
+            if A[i,j] != 0.0; M[i,j] = mG; end
+        end
+        A3 = similar(A); apply_magnitudes_with_sign!(A3, A, M, R; preserve_pairs=preserve_pair_symmetry)
     end
-    _step_metrics(4, A4, u4, K4, R)
 
-    # ---- Step 5: group reassignment (R -> R2) ----
-    R2 = max(1, R - round(Int, 0.1*S))
-    C2 = S - R2
-    A5, _, _ = build_topology(S, R2; conn=conn, cv_cons=cv_cons, cv_res=cv_res,
-                              modularity=modularity, blocks=blocks, IS=IS, rng=rng)
-
-    # resample resource K's from the base distribution to fit R2
-    if R2 <= length(K_res_base)
-        K_res2 = K_res_base[sample(rng, 1:length(K_res_base), R2; replace=false)]
-    else
-        K_res2 = K_res_base[sample(rng, 1:length(K_res_base), R2; replace=true)]
+    # rewiring variants use the generator, always from scratch (original params)
+    function A_step4_rewire_same()
+        A4, _, _ = build_topology(S, R; conn=conn, cv_cons=cv_cons, cv_res=cv_res,
+                                  modularity=modularity, blocks=blocks, IS=IS, rng=rng)
+        A4
     end
-    K5 = vcat(K_res2, zeros(C2))
-
-    # same initial condition length S (use base u0)
-    ok5, u5 = equilibrate_by_ode(u0, K5, A5; tspan=tspan, cb=cb,
-                                 abstol=abstol, reltol=reltol, saveat=saveat)
-    if !ok5
-        u5 = fill(0.0, S)
+    function A_step5_connshift()
+        conn_shift = 0.35
+        new_conn = clamp(conn + (2rand(rng)-1)*conn_shift, 0.01, 0.99)
+        A5, _, _ = build_topology(S, R; conn=new_conn, cv_cons=cv_cons, cv_res=cv_res,
+                                  modularity=modularity, blocks=blocks, IS=IS, rng=rng)
+        A5
     end
-    _step_metrics(5, A5, u5, K5, R2)
+    function A_step6_ISboost()
+        IS_factor = 10.0
+        A6, _, _ = build_topology(S, R; conn=conn, cv_cons=cv_cons, cv_res=cv_res,
+                                  modularity=modularity, blocks=blocks, IS=IS*IS_factor, rng=rng)
+        A6
+    end
+    function A_step7_connshift_ISboost()
+        conn_shift = 0.35; IS_factor = 10.0
+        new_conn = clamp(conn + (2rand(rng)-1)*conn_shift, 0.01, 0.99)
+        A7, _, _ = build_topology(S, R; conn=new_conn, cv_cons=cv_cons, cv_res=cv_res,
+                                  modularity=modularity, blocks=blocks, IS=IS*IS_factor, rng=rng)
+        A7
+    end
+    function step8_reassign_roles()
+        R8 = max(1, R - round(Int, 0.1*S))
+        A8, _, _ = build_topology(S, R8; conn=conn, cv_cons=cv_cons, cv_res=cv_res,
+                                modularity=modularity, blocks=blocks, IS=IS, rng=rng)
+        # Build a K8 with same stats for resources, and the chosen consumer_k for consumers
+        K8 = similar(K, S)
+        muK, sigmaK = mean(K[1:R]), std(K[1:R])
+        for j in 1:R8
+            val = max(1e-6, muK + sigmaK * randn(rng))
+            K8[j] = val
+        end
+        # HERE: use the global choice (thread it in as an argument to modification_ladder!)
+        for i in (R8+1):S
+            K8[i] = consumer_k    # was 0.0 before
+        end
+        return A8, K8, R8
+    end
+
+
+    # ---------- run the requested steps (in numeric order), keeping their step ids ----------
+    A_base = A
+    u_last, K_last, R_last = ustar, K, R
+
+    for step in sort(collect(steps_to_run))
+        if step == 1
+            A_s = A_step1_rowmean(A_base); K_s = K_last; R_s = R_last
+        elseif step == 2
+            A_s = A_step2_rolemean(A_base); K_s = K_last; R_s = R_last
+        elseif step == 3
+            A_s = A_step3_globalmean(A_base); K_s = K_last; R_s = R_last
+        elseif step == 4
+            A_s = A_step4_rewire_same();     K_s = K_last; R_s = R_last
+        elseif step == 5
+            A_s = A_step5_connshift();       K_s = K_last; R_s = R_last
+        elseif step == 6
+            A_s = A_step6_ISboost();         K_s = K_last; R_s = R_last
+        elseif step == 7
+            A_s = A_step7_connshift_ISboost(); K_s = K_last; R_s = R_last
+        elseif step == 8
+            A_s, K_s, R_s = step8_reassign_roles()
+        else
+            @warn "Unknown step $step - skipping."
+            continue
+        end
+
+        u_s, analytic = settle_equilibrium(u_last, A_s, K_s)
+
+        # record whether we settled analytically (true) or via ODE (false)
+        push!(records, Symbol("analytic_settle_S", step) => analytic)
+
+        step_metrics!(step, u_s, K_s, A_s, R_s)
+
+        # advance initial condition for next requested step
+        # u_last, K_last, R_last = u_s, K_s, R_s
+
+    end
+    return nothing
 end
 
 # ---------------------------------------------------------
@@ -769,7 +1080,6 @@ function check_equilibrium(u::AbstractVector, K, A; rtol = 1e-8, tpeek = 0.5, cb
     ok_drift = drift <= 1e-6
     return ok_res & ok_drift, (; res, drift)
 end
-
 
 # ---------------------------------------------------------
 # Fixed-sum integer degree sequence generator
@@ -892,3 +1202,28 @@ function equilibrate_by_ode(u_init, K, A; tspan=(0.0,500.0), cb=nothing,
     ok = ok && all(isfinite, uF) && all(uF .>= 0.0)
     return ok, uF
 end
+
+# algebraic equilibrium (throws on failure)
+function algebraic_equilibrium(A::AbstractMatrix, K::AbstractVector)
+    u = (I - A) \ K
+    if any(!isfinite, u) || any(u .<= 0.0)
+        error("bad equilibrium")
+    end
+    return u
+end
+
+# robust: try algebraic first; fallback to short ODE settle
+# returns (u, analytic::Bool)
+function equilibrium_for(A::AbstractMatrix, K::AbstractVector, u_init::AbstractVector,
+                         tspan, cb; abstol=1e-6, reltol=1e-6, saveat=nothing)
+    try
+        return algebraic_equilibrium(A, K), true
+    catch
+        prob = ODEProblem(gLV_rhs!, u_init, tspan, (K, A))
+        sol  = solve(prob, Tsit5(); callback=cb, abstol=abstol, reltol=reltol,
+                     saveat=saveat, dense=false, save_everystep=false,
+                     save_start=false, save_end=true)
+        return sol.u[end], false
+    end
+end
+
