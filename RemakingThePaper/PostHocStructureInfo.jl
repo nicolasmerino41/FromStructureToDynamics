@@ -156,7 +156,7 @@ plot_structure_range_summary(
     sim_results;
     metrics = [
         (:conn, "Connectance (realized)"),
-        (:realized_mod, "Within-fraction (realized)"),
+        (:realized_mod, "Modularity (realized)"),
         (:deg_cv_cons_out_realized, "Consumer degree CV (realized)")
     ],
     steps = [1,2,3,5],
