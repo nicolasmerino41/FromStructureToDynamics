@@ -25,9 +25,10 @@ function plot_correlations(
     ],
     fit_to_1_1_line::Bool = true,
     remove_unstable::Bool = false,
+    remove_simulated_settlement::Bool = true,
     save_plot::Bool = true,
     save_path::String = "Figures/Correlation_results.png",
-    resolution = (1000, 720),
+    resolution = (1100, 720),
     pixels_per_unit = 6.0,
     rng::AbstractRNG = MersenneTwister(7)
 )
@@ -69,9 +70,29 @@ function plot_correlations(
         println("Removed unstable (any selected step with positive resilience): kept $(nrow(work)) / $total0 rows.")
     end
     nrow(work) == 0 && (@warn "No rows to plot after filtering."; return nothing)
+    if remove_simulated_settlement
+        total0 = nrow(work)
+        keep = trues(total0)
+
+        for (i, row) in enumerate(eachrow(work))
+            for s in steps
+                colname = Symbol(:analytic_settle, :_S, s)
+                if haskey(row, colname)
+                    v = row[colname]
+                    if v === false || v == 0
+                        keep[i] = false
+                        break
+                    end
+                end
+            end
+        end
+
+        work = work[keep, :]
+        println("Removed non-settled rows: kept $(nrow(work)) / $total0 rows.")
+    end
 
     # step labels
-    step_names = ["Rewiring", "Rewiring + ↻C", "Rewiring + ↻IS", "Rewiring + ↻C + ↻IS", "Changing groups"]
+    step_names = ["Row average", "Trophic average", "Global average", "Rewiring", "Rewiring + ↻C", "Rewiring + ↻IS", "Rewiring + ↻C + ↻IS", "Changing groups"]
     colors = [:firebrick, :orangered, :crimson, :darkred]
     fig = Figure(size = resolution)
     Label(fig[0, 2:3], "Remove unstable: $(remove_unstable)", fontsize = 20, font = :bold, halign = :left)
@@ -117,10 +138,13 @@ function plot_correlations(
                 title = "$label: $(step_names[step])",
                 xlabel = string(sym, "_full"),
                 ylabel = string(sym, "_S", step),
-                titlesize = 12, xlabelsize = 11, ylabelsize = 11,
-                xticklabelsize = 11, yticklabelsize = 11,
                 limits = ((mn, mx), (mn, mx)),
-                xgridvisible = false, ygridvisible = false
+                xgridvisible = false, ygridvisible = false,
+                xlabelsize = length(steps) <= 4 ? 11 : 9, 
+                ylabelsize = length(steps) <= 4 ? 11 : 9,
+                xticklabelsize = length(steps) <= 4 ? 11 : 8,
+                yticklabelsize = length(steps) <= 4 ? 11 : 8,
+                titlesize = length(steps) <= 4 ? 12 : 9
             )
 
             scatter!(ax, x, y; color=dot_color, alpha=0.35, markersize=5)
@@ -131,11 +155,11 @@ function plot_correlations(
                 ssr = sum((y .- x).^2)
                 r2 = sst == 0 ? NaN : 1 - ssr/sst
                 isfinite(r2) && text!(ax, "R²=$(round(r2, digits=3))";
-                    position=(mx, mn), align=(:right,:bottom), fontsize=12, color=:black)
+                    position=(mx, mn), align=(:right,:bottom), fontsize=length(steps) <= 4 ? 12 : 8, color=:black)
             else
                 r = cor(x, y)
                 isfinite(r) && text!(ax, "r=$(round(r, digits=3))";
-                    position=(mx, mn), align=(:right,:bottom), fontsize=12, color=:black)
+                    position=(mx, mn), align=(:right,:bottom), fontsize=length(steps) <= 4 ? 12 : 8, color=:black)
             end
         end
     end
@@ -152,18 +176,21 @@ end
 plot_correlations(
     sim_results;
     scenarios = [:CL],
-    steps = [1, 2, 3, 5],
+    steps = [1,2,3,4],
     metrics = [
-        (:resilience, "Resilience"),
-        (:reactivity, "Reactivity"),
+        (:resilienceE, "ResilienceE"),
+        (:reactivityE, "ReactivityE"),
+        # (:resilience, "Resilience"),
+        # (:reactivity, "Reactivity"),
         (:rt_pulse, "Return Time"),
         (:after_press, "Persistence")
     ],
     fit_to_1_1_line = true,
-    remove_unstable = false,
-    save_plot = true,
+    remove_unstable = true,
+    remove_simulated_settlement = false,
+    save_plot = false,
     save_path = "Figures/Correlation_results.png",
-    resolution = (1000, 720),
+    resolution = (1100, 720),
     pixels_per_unit = 6.0,
     rng = MersenneTwister(7)
 )
@@ -200,8 +227,8 @@ function plot_structure_vs_error(
     df;
     steps = [1,2,3,5],
     metrics = [
-        (:resilience, "Resilience"),
-        (:reactivity, "Reactivity"),
+        (:resilienceE, "ResilienceE"),
+        (:reactivityE, "ReactivityE"),
         (:rt_pulse, "Return Time"),
         (:after_press, "Persistence"),
     ],
@@ -301,7 +328,7 @@ function plot_structure_vs_error(
         push!(keep_idx, i)
     end
     Xcols = (conn = x_conn, within = x_within, degcv_cons = x_degcv)
-    xlabels = ("Connectance (realized)", "Within-fraction (realized)", "Consumer degree CV (realized)")
+    xlabels = ("Connectance (realized)", "Modularity (realized)", "Consumer degree CV (realized)")
 
     colors_steps = [:steelblue, :darkorange, :seagreen, :purple, :brown]
     fig = Figure(size = resolution)
@@ -360,15 +387,15 @@ end
 
 plot_structure_vs_error(
     sim_results;
-    steps = [1,2,3,5],
+    steps = [1,2,3,4],
     metrics = [
-        (:resilience, "Resilience"),
-        (:reactivity, "Reactivity"),
+        (:resilienceE, "ResilienceE"),
+        (:reactivityE, "ReactivityE"),
         (:rt_pulse, "Return Time"),
         (:after_press, "Persistence"),
     ],
-    remove_unstable = false,
-    save_plot = true,
+    remove_unstable = true,
+    save_plot = false,
     save_path = "RemakingThePaper/Figures/Structure_vs_Error.png",
     resolution = (1100, 720),
     pixels_per_unit = 6.0,
@@ -463,11 +490,14 @@ function plot_species_level_SL_correlations(
 
     # plotting
     step_names = Dict(
-        1 => "Rewiring",
-        2 => "Rewiring + ↻C",
-        3 => "Rewiring + ↻IS",
-        4 => "Rewiring + ↻C + ↻IS",
-        5 => "Changing groups"
+        1 => "Row average",
+        2 => "Trophic average",
+        3 => "Global average",
+        4 => "Rewiring",
+        5 => "Rewiring + ↻C",
+        6 => "Rewiring + ↻IS",
+        7 => "Rewiring + ↻C + ↻IS",
+        8 => "Changing groups"
     )
     colors = [:firebrick, :orangered, :crimson, :darkred, :teal]
 
@@ -568,8 +598,8 @@ plot_species_level_SL_correlations(
     max_points = 200_000,
     alpha = 0.15,
     sl_max = 100,
-    remove_unstable = false,
-    save_plot = true,
+    remove_unstable = true,
+    save_plot = false,
     filename = "RemakingThePaper/Figures/species_level_SL_alignment.png",
     resolution = (1100, 320),
     pixels_per_unit = 6.0,
@@ -670,7 +700,7 @@ function plot_structure_vs_error_binned(
         push!(keep_idx, i)
     end
     Xs = (x_conn, x_within, x_degcv)
-    xlabels = ("Connectance (realized)", "Within-fraction (realized)", "Consumer degree CV (realized)")
+    xlabels = ("Connectance (realized)", "Modularity (realized)", "Consumer degree CV (realized)")
 
     colors_steps = [:steelblue, :darkorange, :seagreen, :purple, :brown]
     fig = Figure(size = resolution)
@@ -743,8 +773,8 @@ plot_structure_vs_error_binned(
         (:after_press, "Persistence"),
     ],
     n_bins = 30,
-    remove_unstable = false,
-    save_plot = true,
+    remove_unstable = true,
+    save_plot = false,
     save_path = "RemakingThePaper/Figures/Structure_vs_Error_binned.png",
     resolution = (1100, 720),
     pixels_per_unit = 6.0
