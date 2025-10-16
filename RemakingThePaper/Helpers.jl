@@ -543,7 +543,6 @@ function build_topology(S::Int, R::Int;
     return A, r_block, c_block
 end
 
-
 # ---------------------------------------------------------
 # Equilibrium generator
 # ---------------------------------------------------------

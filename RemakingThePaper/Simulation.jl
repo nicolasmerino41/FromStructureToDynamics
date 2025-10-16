@@ -12,7 +12,7 @@ end
 include("Helpers.jl")
 include("Callbacks.jl")
 const CALLBACKS = load_callback_cache("RemakingThePaper/callbacks_cache.jls")
-const CONSUMER_K = 0.01 
+const CONSUMER_K = 0.0 
 
 # ---------------------------------------------------------
 # Threaded RunSimulations (returns DataFrame with Symbol keys)
@@ -248,15 +248,17 @@ A = RunAllSimulations(;
         (50,20), (75,30), (100,40), (125,50), (150,60),
         (175,70), (200,80), (225,90), (250,100), (275,110), (300,120)
     ],
-    number_of_combinations_per_pair = 1,
-    steps_to_run = [1, 2, 3, 4, 5, 6, 8],
+    number_of_combinations_per_pair = 100,
+    preserve_pair_symmetry = true
     # plot_simulation_full = true,
     # plot_simulation_steps = true
 )
 
 @time sim_results = RunAllSimulations(;
-    S_C_combinations = [(50,20), (75,30), (100,40), (125,50), (150,60),
-                        (175,70), (200,80), (225,90), (250,100), (275,110), (300,120)],
+    S_C_combinations = [
+        (50,20), (75,30), (100,40), (125,50), (150,60),
+        (175,70), (200,80), (225,90), (250,100), (275,110), (300,120)
+    ],
     number_of_combinations_per_pair = 5,
     preserve_pair_symmetry = true
 )

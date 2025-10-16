@@ -431,7 +431,7 @@ Shows 1:1 line and reports R² to that line.
 """
 function plot_species_level_SL_correlations(
     df::DataFrame;
-    steps = [1, 2, 3, 5],
+    steps = [1, 2, 3, 4],
     which::Symbol = :all,        # :all | :R | :C
     fit_to_1_1_line::Bool = true,
     subsample_frac::Float64 = 0.5,
@@ -591,8 +591,8 @@ end
 
 plot_species_level_SL_correlations(
     sim_results;
-    steps = [1, 2, 3, 5],
-    which = :R,        # :all | :R | :C
+    steps = [1, 2, 3, 4],
+    which = :C,        # :all | :R | :C
     fit_to_1_1_line = true,
     subsample_frac = 0.5,
     max_points = 200_000,
