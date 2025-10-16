@@ -111,6 +111,9 @@ function RunSimulations(;
             A0, u0, R;
             margin=margin, k_cons=consumer_k
         )
+        IS_realized_full   = mean_abs_interaction(A0)
+        IS_realized_CRfull = mean_abs_CR(A0, R)
+        IS_realized_RCfull = mean_abs_RC(A0, R)
 
         ok, _ = check_equilibrium(u0, K0, A0; cb=cb)
         if !ok
@@ -144,7 +147,11 @@ function RunSimulations(;
             :cv_cons => cv_cons, :cv_res => cv_res,
             :blocks => blocks,
             :IS => IS, :delta => delta, :marg => margin,
-            :alpha_full => alpha, :lambda_max_full => lambda_val,
+            :alpha_full        => alpha,
+            :lambda_max_full   => lambda_val,
+            :IS_realized_full  => IS_realized_full,
+            :IS_CR_full        => IS_realized_CRfull,
+            :IS_RC_full        => IS_realized_RCfull,
             :S_full => full.S_full,
             :resilience_full => full.resilience_full,
             :resilienceE_full => full.resilienceE_full,
@@ -256,10 +263,10 @@ A = RunAllSimulations(;
 
 @time sim_results = RunAllSimulations(;
     S_C_combinations = [
-        (50,20), (75,30), (100,40), (125,50), (150,60),
-        (175,70), (200,80), (225,90), (250,100), (275,110), (300,120)
+        (50,20), (75,30), (100,40)#, (125,50), (150,60),
+        # (175,70), (200,80), (225,90), (250,100), (275,110), (300,120)
     ],
-    number_of_combinations_per_pair = 5,
+    number_of_combinations_per_pair = 100,
     preserve_pair_symmetry = true
 )
 
