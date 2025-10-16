@@ -828,7 +828,7 @@ function modification_ladder!(
         # returns (u_s, analytic::Bool)
         return equilibrium_for(A_step, K_step, u_init, tspan, cb; abstol=abstol, reltol=reltol, saveat=saveat)
     end
-
+    # settle_equilibrium = (u_init, true)
 
     function step_metrics!(step::Int, u_s::Vector{Float64}, K_s::Vector{Float64}, A_s::AbstractMatrix, R_s::Int)
         J_s = jacobian_at_equilibrium(A_s, u_s)
@@ -1044,7 +1044,8 @@ function modification_ladder!(
             continue
         end
 
-        u_s, analytic = settle_equilibrium(u_last, A_s, K_s)
+        # u_s, analytic = settle_equilibrium(u_last, A_s, K_s)
+        u_s, analytic = u_last, true
 
         # record whether we settled analytically (true) or via ODE (false)
         push!(records, Symbol("analytic_settle_S", step) => analytic)
@@ -1226,3 +1227,21 @@ function equilibrium_for(A::AbstractMatrix, K::AbstractVector, u_init::AbstractV
     end
 end
 
+# mean |A| over existing links (overall)
+mean_abs_interaction(A::AbstractMatrix) = begin
+    nz = [abs(A[i,j]) for i in axes(A,1), j in axes(A,2) if i!=j && A[i,j] != 0.0]
+    isempty(nz) ? 0.0 : mean(nz)
+end
+
+# For bipartite matrices with R resources (optional but handy)
+mean_abs_CR(A::AbstractMatrix, R::Int) = begin
+    S = size(A,1)
+    nz = [abs(A[i,j]) for i in (R+1):S, j in 1:R if A[i,j] != 0.0]
+    isempty(nz) ? 0.0 : mean(nz)
+end
+
+mean_abs_RC(A::AbstractMatrix, R::Int) = begin
+    S = size(A,1)
+    nz = [abs(A[i,j]) for i in 1:R, j in (R+1):S if A[i,j] != 0.0]
+    isempty(nz) ? 0.0 : mean(nz)
+end
