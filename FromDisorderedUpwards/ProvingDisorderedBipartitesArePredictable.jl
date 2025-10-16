@@ -341,7 +341,7 @@ function plot_correlations(df::DataFrame; steps=[1,2], metrics=[:res, :rea, :rt]
 end
 
 ######################################## RUN ########################################
-df_bip = scan_bipartite(; S=150, R=75, conn=0.10, mag_cv=0.6, mean_abs=0.1,
+df_bip = scan_bipartite(; S=50, R=30, conn=0.10, mag_cv=0.6, mean_abs=0.1,
                         reps=300, margin=0.05, seed=2025, threaded=true)
 
 plot_correlations(df_bip; steps=[1,2], metrics=[:res, :rea, :rt], resolution=(1100, 700))
