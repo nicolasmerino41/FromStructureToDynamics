@@ -3,9 +3,7 @@
 # - explores abundance heterogeneity
 # - explores degree heterogeneity
 # - explores trophic symmetry correlation
-# Author: [Your Name]
 ################################################################################
-
 using Random, DataFrames, Statistics, CairoMakie
 
 ################################################################################
@@ -13,6 +11,7 @@ using Random, DataFrames, Statistics, CairoMakie
 ################################################################################
 function plot_metrics(df; xvar::Symbol, title::String)
     metrics = [:res_full, :rea_full, :rmed_full]
+    metrics = [:res_rel_to_min_u_full, :rea_rel_to_min_u_full, :rmed_rel_to_min_u_full]
     labels  = ["Resilience", "Reactivity", "Median Return Rate"]
     fig = Figure(size=(1000, 400))
     for (i, metric) in enumerate(metrics)
