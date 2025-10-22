@@ -1,7 +1,7 @@
 using DifferentialEquations, DiffEqCallbacks
 using Random, LinearAlgebra, Statistics, DataFrames, Graphs
 using Distributions, Serialization, Logging, ForwardDiff
-using CairoMakie
+using CairoMakie, CSV
 import Base.Threads: @threads
 
 # using CSV, DataFrames
