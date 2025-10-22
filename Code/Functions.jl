@@ -276,7 +276,7 @@ function simulate_pulse_perturbation_glv(
     pre_state = sol1.u[end]
     before_persistence = count(x -> x > 1e-6, pre_state) / length(pre_state)
 
-    # Apply pulse: u -> u * (1 + delta)
+    # Apply pulse: u -> u * (1 - delta)
     pulsed = pre_state .* (1 .- delta)
     prob2 = ODEProblem(gLV_rhs!, pulsed, (t_pulse, tspan[2]), p)
     sol2  = solve(prob2, solver; callback=cb, abstol=1e-8, reltol=1e-8)

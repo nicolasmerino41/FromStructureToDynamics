@@ -70,7 +70,7 @@ function RunSimulations(
     global cb = build_callbacks(50, EXTINCTION_THRESHOLD)
 
     # Run simulations in parallel
-    @threads for (conn, scen, IS, delta, marg, ite, pex, p_min_deg, mod_gamma) in
+    for (conn, scen, IS, delta, marg, ite, pex, p_min_deg, mod_gamma) in
             sample(combos, min(length(combos), number_of_combinations); replace=false)
 
         # --- Step 1: Build network and interaction matrix ---
@@ -145,17 +145,17 @@ function RunSimulations(
             if step == 1 # Simple rewiring
                 A_s = make_network(A_s, R, conn, scen; IS=IS)
             
-            elseif step == 2 # Rewiring + ↻C
+            elseif step == 2 # Rewiring
                 new_conn = rand()
                 while abs(new_conn - conn) < 0.4
                     new_conn = rand()
                 end
                 A_s = make_network(A_s, R, new_conn, scen; IS=IS)
             
-            elseif step == 3 # Rewiring + ↻IS
+            elseif step == 3 # Rewiring + change C
                 A_s = make_network(A_s, R, conn, scen; IS=IS*10)
             
-            elseif step == 4 # Rewiring + ↻C + ↻IS
+            elseif step == 4 # Rewiring + change IS
                 new_conn = rand()
                 while abs(new_conn - conn) < 0.4
                     new_conn = rand()
@@ -163,12 +163,12 @@ function RunSimulations(
                 A_s = make_network(A_s, R, new_conn, scen; IS=IS*10)
             
             elseif step == 5 # Rewiring + Group reassignment
-                A_s = make_network(A_s, R-5, conn, scen; IS=IS)
+                A_s = make_network(A_s, Int(round(R-0.1*S)), conn, scen; IS=IS)
             end
 
-            # For step 5, turn 5 resources into consumers by setting their K to effectively 0
+            # For step 5, turn 10% of the species from resources into consumers by setting their K to effectively 0
             if step == 5
-                K[R-5:end] .= 0.01
+                K[R-Int(round(R*0.1)):end] .= 0.01
             end
 
             # Recalculate equilibrium
@@ -262,11 +262,11 @@ end
 
 # --- Run simulations for multiple S and C values ---
 function RunAllSimulations(;
-    S_R_combinations = [(100, 40), (50, 20), (200, 80), (300, 120)],
-    number_of_combinations_per_pair = 50000
+    S_C_combinations = [(50, 20), (75, 30), (100, 40), (125, 50), (150, 60), (175, 70), (200, 80), (225, 90), (250, 100), (275, 110), (300, 120)],
+    number_of_combinations_per_pair = 18000
 )
     sim_results = DataFrame()
-    for i in S_R_combinations
+    for i in S_C_combinations
         a, b = i[1], i[2]
         sim = RunSimulations(
             a, b;
@@ -288,11 +288,13 @@ end
 
 # Execute and save
 sim_results = RunAllSimulations(;
-    S_R_combinations = [(100, 40), (50, 20), (200, 80), (300, 120)],
-    number_of_combinations_per_pair = 50000
+    S_C_combinations = [(50, 20), (75, 30), (100, 40), (125, 50), (150, 60), (175, 70), (200, 80), (225, 90), (250, 100), (275, 110), (300, 120)],
+    number_of_combinations_per_pair = 10
 )
-serialize("SimulationResults.jls", sim_results)
 
+serialize("Outputs/SimulationResults.jls", sim_results)
+
+sim_results = deserialize("../../../../Downloads/SimulationResults7200improved.jls")
 # ---------------------------------------------------------------------
 # ------------------------ POSTPROCESSING PART ------------------------
 # ---------------------------------------------------------------------
@@ -321,14 +323,210 @@ plot_correlations(
 # Figure 3
 fig_3 = plot_error_vs_structural_properties(
     sim_results;
-    steps=[1, 2, 3, 5],
+    steps=[1], #[1, 2, 3, 5],
     remove_unstable=false,
     n_bins=30,
     save_plot=true,
-    error_bars=false,
+    error_bars=true,
     outlier_quantile=0.9,
     outlier_quantile_x=1.0,
     relative_error = true,
     resolution = (1100, 1000),
     pixels_per_unit = 6
 )
+
+# Show a 3×3 grid of random SADs
+plot_random_SAD_grid(stable_sim_results; n=9, bins=40, log10=false, save_plot=false, which = :all)
+
+plot_random_SAD_grid(sim_results; n=9, bins=30, log10=false, save_plot=false, which = :R)
+
+plot_random_SAD_grid(sim_results; n=9, bins=30, log10=false, save_plot=false, which = :C)
+plot_random_SAD_grid(stable_sim_results; n=9, bins=30, log10=false, save_plot=false, which = :C)
+
+plot_error_vs_structural_properties(
+    sim_results;
+    steps=[1,2,3,5],
+    binning=:quantile,
+    trim_frac=0.1,
+    smooth_window=7,
+    error_bars=false,
+    save_plot=true
+)
+
+# One-row, 4-panel species-level alignment of SL_time across steps 1,2,3,5
+plot_species_level_SL_correlations(
+    stable_sim_results;
+    steps=[1,2,3,5],
+    which=:R,
+    subsample_frac=1.0,      # thin points to keep it crisp
+    max_points=100000000000000000,
+    alpha=0.15,
+    save_plot=true,
+    filename="Figures/species_level_SL_alignment.png",
+    resolution=(1100, 320),
+    pixels_per_unit=6
+)
+
+plot_species_level_SL_correlations(stable_sim_results; which=:all, sl_max=100)
+plot_species_level_SL_correlations(stable_sim_results; which=:R, sl_max=100)
+plot_species_level_SL_correlations(stable_sim_results; subsample_frac=1.0, which=:C, sl_max=100)
+
+using CairoMakie, Random
+
+function plot_species_level_SL_correlations(
+    df::DataFrame;
+    steps = [1, 2, 3, 5],
+    which::Symbol = :all,          # :all, :R (resources), :C (consumers)
+    fit_to_1_1_line::Bool = true,
+    subsample_frac::Float64 = 1.0,
+    max_points::Int = 200_000,
+    alpha::Float64 = 0.15,
+    save_plot::Bool = false,
+    filename::String = "../Figures/species_level_SL_alignment.png",
+    resolution = (1100, 320),
+    pixels_per_unit = 6.0,
+    seed::Union{Nothing,Int} = nothing,
+    sl_max::Real = 98,            # <— NEW: remove rows if any SL exceeds this
+    k_consumer_cutoff::Float64 = 0.015,  # consumers: K ≤ cutoff (full-model consumers ≈ 0.01)
+)
+    seed === nothing || Random.seed!(seed)
+
+    # --- HARD FILTER: drop any row where SL_full OR any SL_S{step} has a value > sl_max
+    if nrow(df) > 0
+        keep = BitVector(undef, nrow(df))
+        for (i, row) in enumerate(eachrow(df))
+            ok = true
+            # check full
+            sfull = row.SL_full
+            if any(v -> isfinite(v) && v > sl_max, sfull)
+                ok = false
+            else
+                # check selected steps
+                for s in steps
+                    col = Symbol("SL_S$(s)")
+                    if haskey(row, col)
+                        sstep = row[col]
+                        if any(v -> isfinite(v) && v > sl_max, sstep)
+                            ok = false
+                            break
+                        end
+                    end
+                end
+            end
+            keep[i] = ok
+        end
+        df = df[keep, :]
+    end
+
+    step_names = Dict(
+        1 => "Rewiring",
+        2 => "Rewiring + ↻C",
+        3 => "Rewiring + ↻IS",
+        4 => "Rewiring + ↻C + ↻IS",
+        5 => "Changing groups"
+    )
+
+    # helper to compute R² to the 1:1 line
+    _r2_to_1to1 = function(x::AbstractVector{<:Real}, y::AbstractVector{<:Real})
+        if isempty(x) || isempty(y)
+            return NaN
+        end
+        yhat = x
+        μy   = mean(y)
+        sst  = sum((y .- μy).^2)
+        ssr  = sum((y .- yhat).^2)
+        return sst == 0 ? NaN : 1 - ssr/sst
+    end
+
+    ncols = length(steps)
+    fig = Figure(; size = resolution)
+
+    # Aesthetic: use your red palette variations
+    dot_colors = [:firebrick, :orangered, :crimson, :darkred]
+
+    for (j, step) in enumerate(steps)
+        # collect species-level pairs across all rows
+        xs = Float64[]
+        ys = Float64[]
+
+        s_col = Symbol("SL_S$(step)")
+        for row in eachrow(df)
+            sfull = row.SL_full
+            sstep = row[s_col]
+            K, _A = row.p_final  # K is first element of the tuple
+
+            m = min(length(sfull), length(sstep))
+            if m == 0; continue; end
+
+            @inbounds for k in 1:m
+                # species filter by group
+                is_consumer = K[k] <= k_consumer_cutoff
+                keep_species = which === :all || (which === :C && is_consumer) || (which === :R && !is_consumer)
+                if !keep_species; continue; end
+
+                xi = sfull[k]; yi = sstep[k]
+                if isfinite(xi) && isfinite(yi)
+                    push!(xs, xi); push!(ys, yi)
+                end
+            end
+        end
+
+        N = length(xs)
+        if N == 0
+            Axis(fig[1, j]; title = "No data", xgridvisible=false, ygridvisible=false)
+            continue
+        end
+
+        # subsample / cap
+        nkeep = Int(clamp(round(N * subsample_frac), 1, N))
+        nkeep = min(nkeep, max_points)
+        keep_idx = (nkeep == N) ? collect(1:N) : sample(1:N, nkeep; replace=false)
+        xuse = @view xs[keep_idx]; yuse = @view ys[keep_idx]
+
+        # axis limits
+        mn = min(minimum(xuse), minimum(yuse))
+        mx = max(maximum(xuse), maximum(yuse))
+        if !isfinite(mn) || !isfinite(mx) || mn == mx
+            mn, mx = -1.0, 1.0
+        end
+
+        ax = Axis(fig[1, j];
+            title = "SL: $(get(step_names, step, "Step $step"))",
+            xlabel = "Full model",
+            ylabel = j == 1 ? "Simplified model" : "",
+            limits = ((mn, mx), (mn, mx)),
+            xgridvisible=false, ygridvisible=false,
+            xlabelsize=11, ylabelsize=11, titlesize=12,
+            xticklabelsize=10, yticklabelsize=10
+        )
+
+        scatter!(ax, xuse, yuse;
+            color = dot_colors[mod1(j, length(dot_colors))],
+            markersize = 5.0, transparency = true, alpha = alpha
+        )
+
+        lines!(ax, [mn, mx], [mn, mx]; color=:black, linestyle=:dash)
+
+        if fit_to_1_1_line
+            r2 = _r2_to_1to1(xuse, yuse)
+            if isfinite(r2)
+                text!(ax, "R²=$(round(r2, digits=3))";
+                    position=(mx, mn), align=(:right,:bottom), fontsize=12, color=:black
+                )
+            end
+        else
+            r = cor(xuse, yuse)
+            if isfinite(r)
+                text!(ax, "r=$(round(r, digits=3))";
+                    position=(mx, mn), align=(:right,:bottom), fontsize=12, color=:black
+                )
+            end
+        end
+    end
+
+    display(fig)
+    if save_plot
+        save(filename, fig; px_per_unit = pixels_per_unit)
+    end
+    return nothing
+end
