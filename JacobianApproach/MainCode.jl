@@ -2,6 +2,7 @@
 # 1) Helper functions
 ############################
 using Random, Statistics, LinearAlgebra, DataFrames, Distributions
+using CairoMakie
 using Base.Threads
 
 # ===================== Degree-controlled A builders =====================
@@ -56,9 +57,13 @@ function build_random_nontrophic(
 end
 
 # -- trophic (antisymmetric on unordered pairs): Pr(edge {i,j}) ∝ w[i]*w[j]
-function build_random_predation(
+# ---------------------------------------------------------------
+# build_random_trophic WITH trophic symmetry coefficient (rho_sym)
+# ---------------------------------------------------------------
+function build_random_trophic(
     S; conn=0.10, mean_abs=0.10, mag_cv=0.60,
     degree_family::Symbol=:uniform, deg_param::Float64=0.0,
+    rho_sym::Float64 = 0.0,     # <-- NEW: coefficient of symmetry (0=independent, 1=mirrored magnitudes)
     rng=Random.default_rng()
 )
     A = zeros(Float64, S, S)
@@ -68,24 +73,26 @@ function build_random_predation(
     w = _node_weights(S; degree_family=degree_family, deg_param=deg_param, rng=rng)
 
     # pair weights
-    W = similar(pairs, Float64)
-    @inbounds for k in eachindex(pairs)
-        i,j = pairs[k]; W[k] = w[i]*w[j]
-    end
+    W = [w[i]*w[j] for (i,j) in pairs]
     Z = sum(W)
     Z == 0 && return A
     s = E_target / Z
 
-    σm = sqrt(log(1 + mag_cv^2)); μm = log(mean_abs) - σm^2/2
-    @inbounds for k in eachindex(pairs)
-        i,j = pairs[k]
-        p   = min(1.0, s*W[k])
+    σm = sqrt(log(1 + mag_cv^2))
+    μm = log(mean_abs) - σm^2/2
+
+    for (idx, (i,j)) in enumerate(pairs)
+        p = min(1.0, s*W[idx])
         if rand(rng) < p
-            m = rand(rng, LogNormal(μm, σm))
+            # Draw base magnitude and its reciprocal depending on rho_sym
+            m1 = rand(rng, LogNormal(μm, σm))
+            m2 = rho_sym*m1 + (1-rho_sym)*rand(rng, LogNormal(μm, σm))
+
+            # Random trophic direction
             if rand(rng) < 0.5
-                A[i,j] = +m; A[j,i] = -m
+                A[i,j] =  m1; A[j,i] = -m2
             else
-                A[i,j] = -m; A[j,i] = +m
+                A[i,j] = -m1; A[j,i] =  m2
             end
         end
     end
@@ -141,49 +148,88 @@ function alpha_off_from(J,u)
 end
 
 function build_J_from(α::AbstractMatrix, u::AbstractVector)
-    S = length(u); J = zeros(Float64, S, S)
-    @inbounds for i in 1:S
-        J[i,i] = -u[i]
-        for j in 1:S
-            if i!=j && α[i,j] != 0.0
-                J[i,j] = u[i]*α[i,j]
+    # indices of non-zero abundances
+    nonzero_idx = findall(!iszero, u)
+    n = length(nonzero_idx)
+
+    # if all u are zero, return an empty 0×0 matrix
+    if n == 0
+        return zeros(Float64, 0, 0)
+    end
+
+    # extract corresponding submatrix and subvector
+    α_sub = α[nonzero_idx, nonzero_idx]
+    u_sub = u[nonzero_idx]
+
+    # build Jacobian on the reduced system
+    J = zeros(Float64, n, n)
+    @inbounds for i in 1:n
+        J[i,i] = -u_sub[i]
+        for j in 1:n
+            if i != j && α_sub[i,j] != 0.0
+                J[i,j] = u_sub[i] * α_sub[i,j]
             end
         end
     end
-    J
+
+    return J
 end
 
-# ----- α operators & uniform u -----
+# 1. Variance-preserving reshuffling
+function op_reshuffle_alpha(α::AbstractMatrix; rng=Random.default_rng())
+    S = size(α,1)
+    nonzeros = [(i,j) for i in 1:S for j in 1:S if i != j && α[i,j] != 0.0]
+    vals = [α[i,j] for (i,j) in nonzeros]
+    perm = randperm(rng, length(vals))
+    α_new = zeros(Float64, S, S)
+    for (k, (i,j)) in enumerate(nonzeros)
+        α_new[i,j] = vals[perm[k]]
+    end
+    α_new
+end
+
+# 2. Row mean averaging
 function op_rowmean_alpha(α::AbstractMatrix)
-    S = size(α,1); out = zeros(Float64, S, S)
-    @inbounds for i in 1:S
-        mags = Float64[]
-        for j in 1:S
-            if i!=j && α[i,j]!=0.0; push!(mags, abs(α[i,j])); end
-        end
-        mi = isempty(mags) ? 0.0 : mean(mags)
-        for j in 1:S
-            if i!=j && α[i,j]!=0.0
-                out[i,j] = sign(α[i,j]) * mi
+    S = size(α,1)
+    out = zeros(Float64, S, S)
+    for i in 1:S
+        nz = [abs(α[i,j]) for j in 1:S if i != j && α[i,j] != 0.0]
+        if !isempty(nz)
+            mi = mean(nz)
+            for j in 1:S
+                if i != j && α[i,j] != 0.0
+                    out[i,j] = sign(α[i,j]) * mi
+                end
             end
         end
     end
     out
 end
 
-function op_threshold_alpha(α; q=0.20)
-    mags = [abs(α[i,j]) for i in 1:size(α,1), j in 1:size(α,2) if i!=j && α[i,j]!=0.0]
+# 3. Thresholding (remove weakest q%)
+function op_threshold_alpha(α::AbstractMatrix; q=0.2)
+    mags = [abs(α[i,j]) for i in 1:size(α,1), j in 1:size(α,2) if i != j && α[i,j] != 0.0]
     τ = isempty(mags) ? 0.0 : quantile(mags, q)
-    S = size(α,1); out = zeros(Float64, S, S)
-    @inbounds for i in 1:S, j in 1:S
-        if i!=j && abs(α[i,j]) >= τ
+    S = size(α,1)
+    out = zeros(Float64, S, S)
+    for i in 1:S, j in 1:S
+        if i != j && abs(α[i,j]) >= τ
             out[i,j] = α[i,j]
         end
     end
     out
 end
 
+# 4. Uniform abundances
 uniform_u(u) = fill(mean(u), length(u))
+
+# 5. Remove rarest species (lowest fraction p)
+function remove_rarest_species(u::Vector{Float64}; p::Float64=0.1)
+    u_cutoff = quantile(u, p)
+    u_masked = copy(u)
+    u_masked[u .< u_cutoff] .= 0.0
+    u_masked
+end
 
 # ----- realized structure (post-stabilization) -----
 function realized_connectance(A)
@@ -228,26 +274,28 @@ Returns a DataFrame with realized structure (post-stabilization),
 shrink_alpha, lambda_max, and res/rea for full + 6 steps.
 """
 function run_sweep_stable(
-    ; modes = [:NT, :TR],
+    ; modes = [:TR],
       S_vals = [150],
       conn_vals = 0.05:0.05:0.30,
       mean_abs_vals = [0.05, 0.10, 0.20],
       mag_cv_vals   = [0.4, 0.6, 1.0],
-      u_mean_vals   = [0.8, 1.0, 1.2],
-      u_cv_vals     = [0.3, 0.5, 0.8],
-      # degree heterogeneity
+      u_mean_vals   = [1.0],
+      u_cv_vals     = [0.5],
       degree_families = [:uniform, :lognormal, :pareto],
-      deg_cv_vals   = [0.0, 0.5, 1.0, 2.0],    # for :lognormal
-      deg_pl_alphas = [1.2, 1.5, 2.0, 3.0],    # for :pareto
-      # stability controls
+      deg_cv_vals   = [0.0, 0.5, 1.0, 2.0],
+      deg_pl_alphas = [1.2, 1.5, 2.0, 3.0],
+      rho_sym_vals  = [0.0, 0.25, 0.5, 0.75, 1.0],     # <-- NEW: symmetry coefficients
       margin = 0.05, shrink_factor = 0.9, max_shrink_iter = 200,
-      # sampling
       reps_per_combo = 2,
       seed = 1234, number_of_combinations = 10_000,
       q_thresh = 0.20
 )
-    genA(mode) = mode === :NT ? build_random_nontrophic : build_random_predation
-
+    genA(mode, rho_sym, rng, conn, mean_abs, mag_cv, deg_fam, deg_param, S) = mode === :NT ? 
+        build_random_nontrophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
+                                degree_family=deg_fam, deg_param=deg_param, rng=rng) :
+        build_random_trophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
+                             degree_family=deg_fam, deg_param=deg_param,
+                             rho_sym=rho_sym, rng=rng)
     # expand degree specs
     deg_specs = Tuple{Symbol,Float64}[]
     for fam in degree_families
@@ -262,31 +310,29 @@ function run_sweep_stable(
 
     combos = collect(Iterators.product(
         modes, S_vals, conn_vals, mean_abs_vals, mag_cv_vals,
-        u_mean_vals, u_cv_vals, deg_specs, 1:reps_per_combo
+        u_mean_vals, u_cv_vals, deg_specs, 1:reps_per_combo,
+        rho_sym_vals
     ))
     println("Computing $(number_of_combinations) of $(length(combos)) combinations")
 
     sel = (length(combos) > number_of_combinations) ?
           sample(combos, number_of_combinations; replace=false) : combos
-    println("Using $(length(sel)) combinations")
-
+    
     base = _splitmix64(UInt64(seed))
     buckets = [Vector{NamedTuple}() for _ in 1:nthreads()]
 
-    Threads.@threads for idx in eachindex(sel)
-        (mode, S, conn, mean_abs, mag_cv, u_mean, u_cv, (deg_fam, deg_param), _) = sel[idx]
+    for idx in eachindex(sel)
+        (mode, S, conn, mean_abs, mag_cv, u_mean, u_cv, (deg_fam, deg_param), _, rho_sym) = sel[idx]
+        
         rng0 = Random.Xoshiro(_splitmix64(base ⊻ UInt64(idx)))
+        rng  = Random.Xoshiro(_splitmix64(rand(rng0, UInt64)))
 
-        rng = Random.Xoshiro(_splitmix64(rand(rng0, UInt64)))
-
-        # ---- build base A & u ----
-        A = genA(mode)(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
-                        degree_family=deg_fam, deg_param=deg_param, rng=rng)
+        A = genA(mode, rho_sym, rng, conn, mean_abs, mag_cv, deg_fam, deg_param, S)
         u = random_u(S; mean=u_mean, cv=u_cv, rng=rng)
-        # u = fill(u_mean, S)
-
-        # ---- stabilize (shrink A; keep u fixed) ----
-        A, αshrink, λmax = stabilize_shrink!(A, u; margin=margin, factor=shrink_factor, max_iter=max_shrink_iter)
+        
+        # Stabilize and compute metrics
+        A, αshrink, λmax = stabilize_shrink!(A, u; margin=margin, factor=shrink_factor)
+        J = jacobian(A, u)
 
         # realized structure AFTER stabilization
         conn_real = realized_connectance(A)
@@ -294,22 +340,24 @@ function run_sweep_stable(
         degs      = degree_CVs(A)
         ucv_real  = (mean(u)>0 ? std(u)/mean(u) : NaN)
 
-        # full J (stable by construction)
-        J = jacobian(A, u)
+        # --- Compute α and transformations
+        α = alpha_off_from(J, u)
 
-        # α_off and steps
-        α      = alpha_off_from(J, u)
-        α_row  = op_rowmean_alpha(α)
-        α_thr  = op_threshold_alpha(α; q=q_thresh)
-        # u_uni  = uniform_u(u)
-        u_uni  = uniform_u(fill(u_mean, S))
+        α_reshuf = op_reshuffle_alpha(α; rng=rng)
+        α_row    = op_rowmean_alpha(α)
+        α_thr    = op_threshold_alpha(α; q=q_thresh)
 
-        J_row      = build_J_from(α_row, u)
-        J_thr      = build_J_from(α_thr, u)
-        J_uni      = build_J_from(α, u_uni)
-        J_thr_row  = build_J_from(op_rowmean_alpha(α_thr), u)
-        J_row_uni  = build_J_from(α_row, u_uni)
-        J_thr_uni  = build_J_from(α_thr, u_uni)
+        u_uni     = uniform_u(u)
+        u_rarerem = remove_rarest_species(u; p=0.1)
+
+
+        J_full = J
+        J_reshuf = build_J_from(α_reshuf, u)
+        J_row    = build_J_from(α_row, u)
+        J_thr    = build_J_from(α_thr, u)
+        J_uni    = build_J_from(α, u_uni)
+        J_rarer  = build_J_from(α, u_rarerem)
+
 
         push!(buckets[threadid()], (;
             mode, S,
@@ -319,17 +367,23 @@ function run_sweep_stable(
             # realized post-stabilization
             conn_real, IS_real, u_cv=ucv_real,
             deg_cv_in=degs.deg_cv_in, deg_cv_out=degs.deg_cv_out, deg_cv_all=degs.deg_cv_all,
+            rho_sym = rho_sym,
             shrink_alpha = αshrink, lambda_max = λmax,
+            
             # full (stable)
-            res_full = resilience(J), min_u = minimum(u), diff_res_min_u = -resilience(J) - minimum(u),
-            rea_full = reactivity(J),
-            # 6 steps
-            res_row  = resilience(J_row),      rea_row  = reactivity(J_row),
-            res_thr  = resilience(J_thr),      rea_thr  = reactivity(J_thr),
-            res_uni  = resilience(J_uni),      rea_uni  = reactivity(J_uni),
-            res_thr_row = resilience(J_thr_row),  rea_thr_row = reactivity(J_thr_row),
-            res_row_uni = resilience(J_row_uni),  rea_row_uni = reactivity(J_row_uni),
-            res_thr_uni = resilience(J_thr_uni),  rea_thr_uni = reactivity(J_thr_uni)
+            res_full = resilience(J_full), min_u = minimum(u), diff_res_min_u = -resilience(J_full) - minimum(u),
+            rea_full = reactivity(J_full),
+            rmed_full = median_return_rate(J_full),
+            
+            res_rel_to_min_u_full = resilience(J_full) / minimum(u),
+            rea_rel_to_min_u_full = reactivity(J_full) / minimum(u),
+            rmed_rel_to_min_u_full = median_return_rate(J_full) / minimum(u),
+            # ---- STEPS ----
+            res_reshuf = resilience(J_reshuf), rea_reshuf = reactivity(J_reshuf), rmed_reshuf = median_return_rate(J_reshuf),
+            res_row    = resilience(J_row),    rea_row    = reactivity(J_row),    rmed_row    = median_return_rate(J_row),
+            res_thr    = resilience(J_thr),    rea_thr    = reactivity(J_thr),    rmed_thr    = median_return_rate(J_thr),
+            res_uni    = resilience(J_uni),    rea_uni    = reactivity(J_uni),    rmed_uni    = median_return_rate(J_uni),
+            res_rarer  = resilience(J_rarer),  rea_rarer  = reactivity(J_rarer),  rmed_rarer  = median_return_rate(J_rarer)
         ))
     end
 
@@ -369,17 +423,18 @@ end
 # --------------------------
 # Minimal example run
 # --------------------------
-dff = run_sweep_stable(
+df_tr = run_sweep_stable(
     ; modes=[:TR], S_vals=[120], conn_vals=0.05:0.05:0.30,
-      mean_abs_vals=[0.05,0.15, 0.5, 1.0], mag_cv_vals=[0.4,0.6,1.0,2.0],
+      mean_abs_vals=[1.0], mag_cv_vals=[0.1],
       u_mean_vals=[1.0], u_cv_vals=[0.3,0.5,0.8,1.0,2.0,3.0],
-      degree_families = [:uniform, :lognormal, :pareto],
+      degree_families = [:uniform],# :lognormal, :pareto],
       deg_cv_vals   = [0.0, 0.5, 1.0, 2.0],
       deg_pl_alphas = [1.2, 1.5, 2.0, 3.0],
+      rho_sym_vals  = range(0, 1, length=10),
       reps_per_combo=2, seed=42, number_of_combinations=500,
       margin=0.05, shrink_factor=0.9, max_shrink_iter=200, q_thresh=0.20
 )
-print_structure_summary(dff)
+print_structure_summary(df_tr)
 
 # ----------------------------- plotting: correlations ----------------------------
 """
@@ -446,14 +501,39 @@ function plot_correlations(df::DataFrame; steps=["row", "thr", "uni", "thr_row",
 end
 
 # ----------------------------- run both modes, show plots ------------------------
-df_stable = filter(row -> row.shrink_alpha > 0.5, dff)
+df_tr = filter(row -> row.shrink_alpha > 0.5, df_tr)
 # Non-trophic sweep
-df_nt = filter(row -> row.mode == :NT, df_stable)
-plot_correlations(df_nt; metrics=[:res, :rea],
-                  title="Non-trophic — Full vs 6-steps Jacobian simplifications")
+df_tr_stable = filter(row -> row.mode == :NT, df_stable)
+plot_correlations(df_tr; metrics=[:res, :rea],
+                  title="Trophic (heterogeneus abundances, 4th step is remove rare)")# — Full vs 6-steps Jacobian simplifications")
 
 # Trophic sweep
-df_tr = filter(row -> row.mode == :TR, df_stable)
-plot_correlations(df_tr; metrics=[:res, :rea],
-                  title="Trophic — Full vs 6-steps Jacobian simplifications")
+df_nt_stable = filter(row -> row.shrink_alpha > 0.5, df_nt)
+# df_tr = filter(row -> row.mode == :TR, df_stable)
+plot_correlations(df_nt; metrics=[:res, :rea],
+                  title="Non-trophic — Full vs 6-steps Jacobian simplifications")
 ###################################################################################
+function plot_stability_metrics(df; title="Stability metrics vs symmetry coefficient")
+    fig = Figure(size=(1000, 400))
+    for (i, metric) in enumerate([:res_full, :rea_full, :rmed_full])
+    # for (i, metric) in enumerate([:res_rel_to_min_u_full, :rea_rel_to_min_u_full, :rmed_rel_to_min_u_full])
+        ax = Axis(fig[1, i],
+            title=replace(string(metric), "_full" => ""),
+            xlabel="Symmetry coefficient (ρ)",
+            # ylabel = metric == :rmed_rel_to_min_u_full ? "Median Return Rate" :
+            #           metric == :rea_rel_to_min_u_full ? "Reactivity" : "Resilience")
+            ylabel = metric == :rmed_full ? "Median Return Rate" :
+                      metric == :rea_full ? "Reactivity" : "Resilience")
+
+        for mode in unique(df.mode)
+            sub = df[df.mode .== mode, :]
+            scatter!(ax, sub.rho_sym, sub[!, metric];
+                     label=mode, alpha=0.4, markersize=5)
+        end
+        # axislegend(ax; position=:rb)
+    end
+    Label(fig[0, 1:3], title; fontsize=18, halign=:center)
+    display(fig)
+end
+
+plot_stability_metrics(df_tr)

@@ -1,4 +1,3 @@
-
 using CairoMakie, Statistics
 
 # ---------- helpers ----------

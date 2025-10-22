@@ -4,10 +4,10 @@ begin
     ax = Axis(fig[1, 1],
         xlabel = "u_cv",
         ylabel = "diff_res_min_u",
-        title = "Scatter plot of diff_res_min_u vs u_cv"
+        title = "Scatter plot of diff_res_min_u vs u_cv (all IS)"
     )
 
-    scatter!(ax, dff.u_cv, dff.diff_res_min_u;
+    scatter!(ax, df_tr.u_cv, df_tr.diff_res_min_u;
         color = :dodgerblue,
         markersize = 8,
         strokewidth = 0.5

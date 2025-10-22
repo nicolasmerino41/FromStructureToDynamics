@@ -23,7 +23,7 @@ println(combine(groupby(proof, :u_cv), :resilience => mean))
 
 begin
     using CairoMakie
-    fig = Figure(size=(1100,650))
+    fig = Figure(size=(1100,575))
     ax = Axis(fig[1,1], xlabel="CV(u)", ylabel="Resilience (Re λmax)", title="Effect of abundance heterogeneity on stability")
     ax2 = Axis(fig[1,2], xlabel="CV(u)", ylabel="Resilience - min u", title="Effect of abundance heterogeneity on stability")
     ax3 = Axis(fig[2,1], xlabel="CV(u)", ylabel="Resilience over min u ", title="Effect of abundance heterogeneity on stability")
