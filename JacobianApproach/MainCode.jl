@@ -28,31 +28,83 @@ function _node_weights(S; degree_family::Symbol, deg_param::Float64, rng)
 end
 
 # -- directed, non-trophic: P[i,j] ∝ w_out[i] * w_in[j], i≠j
+# Directed, non-trophic with pairwise magnitude correlation:
+# - Edge existence i→j and j→i is sampled independently (Chung–Lu style).
+# - If BOTH directions exist, magnitudes are drawn with Corr(|Aij|,|Aji|)=rho_sym.
+# - Signs are independent ±1 (no constraint).
 function build_random_nontrophic(
     S; conn=0.10, mean_abs=0.10, mag_cv=0.60,
     degree_family::Symbol=:uniform, deg_param::Float64=0.0,
+    rho_sym::Float64=0.0,
     rng=Random.default_rng()
 )
+    @assert 0.0 <= rho_sym <= 1.0 "rho_sym must be in [0,1]"
+
     A = zeros(Float64, S, S)
+    # target expected number of directed edges
     E_target = clamp(round(Int, conn * S*(S-1)), 0, S*(S-1))
 
+    # node propensities
     w_out = _node_weights(S; degree_family=degree_family, deg_param=deg_param, rng=rng)
     w_in  = _node_weights(S; degree_family=degree_family, deg_param=deg_param, rng=rng)
 
-    # unnormalized probs (zero diagonal)
+    # unnormalized probs (zero diagonal) -> scale to match E_target in expectation
     P = w_out .* transpose(w_in)
     @inbounds for i in 1:S; P[i,i] = 0.0; end
     s = (sum(P) > 0) ? (E_target / sum(P)) : 0.0
     @. P = min(1.0, s*P)
 
-    # sample edges (Bernoulli), assign magnitudes and random signs
-    σm = sqrt(log(1 + mag_cv^2)); μm = log(mean_abs) - σm^2/2
-    @inbounds for i in 1:S, j in 1:S
-        if i != j && rand(rng) < P[i,j]
-            m = rand(rng, LogNormal(μm, σm))
-            A[i,j] = (rand(rng) < 0.5 ? +m : -m)
+    # lognormal magnitude parameters
+    σm = sqrt(log(1 + mag_cv^2))
+    μm = log(mean_abs) - σm^2/2
+
+    # map target corr of magnitudes -> corr of underlying normals
+    # Corr(LogNormal) = (exp(σ^2*rZ) - 1) / (exp(σ^2) - 1)
+    # => rZ = log(ρ*(e^{σ^2}-1)+1) / σ^2
+    rZ = if σm == 0.0
+        0.0
+    else
+        expσ2 = exp(σm^2)
+        clamp(log(rho_sym * (expσ2 - 1) + 1) / σm^2, -1.0, 1.0)
+    end
+
+    # iterate unordered pairs; sample two directed edges per pair
+    for i in 1:S-1, j in (i+1):S
+        p_ij = P[i,j]
+        p_ji = P[j,i]
+
+        has_ij = (rand(rng) < p_ij)
+        has_ji = (rand(rng) < p_ji)
+
+        if !has_ij && !has_ji
+            continue
+        end
+
+        if σm == 0.0
+            # constant magnitudes
+            m1 = mean_abs
+            m2 = mean_abs
+        elseif has_ij && has_ji && rho_sym > 0.0
+            # draw correlated normals for magnitudes
+            z1 = randn(rng)
+            z2 = rZ*z1 + sqrt(max(0.0, 1 - rZ^2)) * randn(rng)
+            m1 = exp(μm + σm*z1)
+            m2 = exp(μm + σm*z2)
+        else
+            # at most one direction present or rho_sym==0: draw independent
+            m1 = exp(μm + σm*randn(rng))
+            m2 = exp(μm + σm*randn(rng))
+        end
+
+        # independent random signs (no constraint)
+        if has_ij
+            A[i,j] = (rand(rng) < 0.5 ? +m1 : -m1)
+        end
+        if has_ji
+            A[j,i] = (rand(rng) < 0.5 ? +m2 : -m2)
         end
     end
+
     return A
 end
 
@@ -60,42 +112,76 @@ end
 # ---------------------------------------------------------------
 # build_random_trophic WITH trophic symmetry coefficient (rho_sym)
 # ---------------------------------------------------------------
+# -- trophic (antisymmetric on unordered pairs): Pr(edge {i,j}) ∝ w[i]*w[j]
+# ρ_sym is the TARGET Pearson correlation of the two magnitudes |A_ij| and |A_ji|.
 function build_random_trophic(
     S; conn=0.10, mean_abs=0.10, mag_cv=0.60,
     degree_family::Symbol=:uniform, deg_param::Float64=0.0,
-    rho_sym::Float64 = 0.0,     # <-- NEW: coefficient of symmetry (0=independent, 1=mirrored magnitudes)
+    rho_sym::Float64 = 0.0,     # 0 => independent magnitudes, 1 => identical magnitudes
     rng=Random.default_rng()
 )
+    @assert 0.0 <= rho_sym <= 1.0 "rho_sym must be in [0,1]"
+
     A = zeros(Float64, S, S)
+
+    # unordered pairs and target number of active pairs
     pairs = [(i,j) for i in 1:S for j in (i+1):S]
     E_target = clamp(round(Int, conn * length(pairs)), 0, length(pairs))
 
+    # pair sampling weights (degree heterogeneity)
     w = _node_weights(S; degree_family=degree_family, deg_param=deg_param, rng=rng)
-
-    # pair weights
     W = [w[i]*w[j] for (i,j) in pairs]
-    Z = sum(W)
-    Z == 0 && return A
-    s = E_target / Z
+    ZW = sum(W)
+    ZW == 0 && return A
+    s_pair = E_target / ZW  # global scale to hit expected connectance on unordered pairs
 
+    # lognormal magnitude parameters
     σm = sqrt(log(1 + mag_cv^2))
     μm = log(mean_abs) - σm^2/2
 
-    for (idx, (i,j)) in enumerate(pairs)
-        p = min(1.0, s*W[idx])
-        if rand(rng) < p
-            # Draw base magnitude and its reciprocal depending on rho_sym
-            m1 = rand(rng, LogNormal(μm, σm))
-            m2 = rho_sym*m1 + (1-rho_sym)*rand(rng, LogNormal(μm, σm))
+    # If σm == 0 the magnitudes are constant; set them equal (any ρ is effectively satisfied)
+    if σm == 0.0
+        for (idx, (i,j)) in enumerate(pairs)
+            p = min(1.0, s_pair * W[idx])
+            if rand(rng) < p
+                m = mean_abs
+                if rand(rng) < 0.5
+                    A[i,j] =  m;  A[j,i] = -m
+                else
+                    A[i,j] = -m;  A[j,i] =  m
+                end
+            end
+        end
+        return A
+    end
 
-            # Random trophic direction
+    # Map target corr of magnitudes (rho_sym) -> corr of the underlying normals (rZ)
+    # Corr(LogNormal) = (exp(σ^2*rZ) - 1) / (exp(σ^2) - 1)  =>  rZ = log(ρ*(e^{σ^2}-1)+1) / σ^2
+    expσ2 = exp(σm^2)
+    rZ = log(rho_sym * (expσ2 - 1) + 1) / σm^2
+    rZ = clamp(rZ, -1.0, 1.0)  # numeric safety; for rho_sym∈[0,1] this is [0,1]
+
+    # draw per-pair correlated lognormal magnitudes with Corr(|A_ij|,|A_ji|)=rho_sym
+    for (idx, (i,j)) in enumerate(pairs)
+        p = min(1.0, s_pair * W[idx])
+        if rand(rng) < p
+            # correlated standard normals
+            z1 = randn(rng)
+            z2 = rZ*z1 + sqrt(max(0.0, 1 - rZ^2)) * randn(rng)
+
+            # lognormal magnitudes with matching marginals
+            m1 = exp(μm + σm*z1)
+            m2 = exp(μm + σm*z2)
+
+            # random trophic direction (strict antisymmetry of signs)
             if rand(rng) < 0.5
-                A[i,j] =  m1; A[j,i] = -m2
+                A[i,j] =  m1;  A[j,i] = -m2
             else
-                A[i,j] = -m1; A[j,i] =  m2
+                A[i,j] = -m1;  A[j,i] =  m2
             end
         end
     end
+
     return A
 end
 
@@ -109,6 +195,34 @@ end
 jacobian(A,u) = Diagonal(u) * (A - I)
 resilience(J) = maximum(real, eigvals(J))
 reactivity(J) = maximum(real, eigvals((J + J')/2))
+
+# Arnoldi median average return rate at time t
+# C model: :uniform  -> C ∝ I
+#          :biomass  -> C_ii ∝ (u_i)^2   (needs u)
+function median_return_rate(
+    J::AbstractMatrix, u::AbstractVector;
+    t::Real=0.01, perturbation::Symbol=:biomass
+)
+    S = size(J,1)
+    if S == 0 || any(!isfinite, J)
+        return NaN
+    end
+    E = exp(t*J)
+    if perturbation === :uniform
+        # constants cancel in the log-ratio; use C = I for simplicity
+        num = log(tr(E * transpose(E)))
+        den = log(S)
+    elseif perturbation === :biomass
+        @assert u !== nothing "u is required for perturbation=:biomass"
+        w = u .^ 2
+        C = Diagonal(w)
+        num = log(tr(E * C * transpose(E)))
+        den = log(sum(w))
+    else
+        error("Unknown perturbation model: $perturbation")
+    end
+    return -(num - den) / (2t)
+end
 
 # ----- Stabilize by shrinking A (keep u* fixed) -----
 """
@@ -284,7 +398,7 @@ function run_sweep_stable(
       degree_families = [:uniform, :lognormal, :pareto],
       deg_cv_vals   = [0.0, 0.5, 1.0, 2.0],
       deg_pl_alphas = [1.2, 1.5, 2.0, 3.0],
-      rho_sym_vals  = [0.0, 0.25, 0.5, 0.75, 1.0],     # <-- NEW: symmetry coefficients
+      rho_sym_vals  = [0.0, 0.25, 0.5, 0.75, 1.0],
       margin = 0.05, shrink_factor = 0.9, max_shrink_iter = 200,
       reps_per_combo = 2,
       seed = 1234, number_of_combinations = 10_000,
@@ -292,10 +406,12 @@ function run_sweep_stable(
 )
     genA(mode, rho_sym, rng, conn, mean_abs, mag_cv, deg_fam, deg_param, S) = mode === :NT ? 
         build_random_nontrophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
-                                degree_family=deg_fam, deg_param=deg_param, rng=rng) :
+                                degree_family=deg_fam, deg_param=deg_param, 
+                                rho_sym=rho_sym, rng=rng) :
         build_random_trophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
                              degree_family=deg_fam, deg_param=deg_param,
                              rho_sym=rho_sym, rng=rng)
+
     # expand degree specs
     deg_specs = Tuple{Symbol,Float64}[]
     for fam in degree_families
@@ -321,7 +437,7 @@ function run_sweep_stable(
     base = _splitmix64(UInt64(seed))
     buckets = [Vector{NamedTuple}() for _ in 1:nthreads()]
 
-    for idx in eachindex(sel)
+    Threads.@threads for idx in eachindex(sel)
         (mode, S, conn, mean_abs, mag_cv, u_mean, u_cv, (deg_fam, deg_param), _, rho_sym) = sel[idx]
         
         rng0 = Random.Xoshiro(_splitmix64(base ⊻ UInt64(idx)))
@@ -350,14 +466,18 @@ function run_sweep_stable(
         u_uni     = uniform_u(u)
         u_rarerem = remove_rarest_species(u; p=0.1)
 
-
-        J_full = J
+        # ---- rewiring step (same generator & params, new arrangement) ----
+        A_rew = genA(mode, rho_sym, rng, conn, mean_abs, mag_cv, deg_fam, deg_param, S)
+        A_rew .*= αshrink               # keep post-shrink magnitude scale "as is"
+        
+        # J variants
+        J_full   = J
         J_reshuf = build_J_from(α_reshuf, u)
         J_row    = build_J_from(α_row, u)
         J_thr    = build_J_from(α_thr, u)
         J_uni    = build_J_from(α, u_uni)
         J_rarer  = build_J_from(α, u_rarerem)
-
+        J_rew  = jacobian(A_rew, u)
 
         push!(buckets[threadid()], (;
             mode, S,
@@ -373,17 +493,37 @@ function run_sweep_stable(
             # full (stable)
             res_full = resilience(J_full), min_u = minimum(u), diff_res_min_u = -resilience(J_full) - minimum(u),
             rea_full = reactivity(J_full),
-            rmed_full = median_return_rate(J_full),
+            rmed_full = median_return_rate(J_full, u; t=0.01, perturbation=:biomass),
+            long_rmed_full = median_return_rate(J_full, u; t=0.5, perturbation=:biomass),
             
             res_rel_to_min_u_full = resilience(J_full) / minimum(u),
             rea_rel_to_min_u_full = reactivity(J_full) / minimum(u),
-            rmed_rel_to_min_u_full = median_return_rate(J_full) / minimum(u),
+            rmed_rel_to_min_u_full = median_return_rate(J_full, u) / minimum(u),
+
             # ---- STEPS ----
-            res_reshuf = resilience(J_reshuf), rea_reshuf = reactivity(J_reshuf), rmed_reshuf = median_return_rate(J_reshuf),
-            res_row    = resilience(J_row),    rea_row    = reactivity(J_row),    rmed_row    = median_return_rate(J_row),
-            res_thr    = resilience(J_thr),    rea_thr    = reactivity(J_thr),    rmed_thr    = median_return_rate(J_thr),
-            res_uni    = resilience(J_uni),    rea_uni    = reactivity(J_uni),    rmed_uni    = median_return_rate(J_uni),
-            res_rarer  = resilience(J_rarer),  rea_rarer  = reactivity(J_rarer),  rmed_rarer  = median_return_rate(J_rarer)
+            res_reshuf = resilience(J_reshuf), rea_reshuf = reactivity(J_reshuf),
+            rmed_reshuf = median_return_rate(J_reshuf, u),
+            long_rmed_reshuf = median_return_rate(J_reshuf, u; t=0.5),
+            
+            res_thr = resilience(J_thr), rea_thr = reactivity(J_thr),
+            rmed_thr = median_return_rate(J_thr, u),
+            long_rmed_thr = median_return_rate(J_thr, u; t=0.5),
+            
+            res_row = resilience(J_row), rea_row = reactivity(J_row), 
+            rmed_row = median_return_rate(J_row, u),
+            long_rmed_row = median_return_rate(J_row, u; t=0.5),
+            
+            res_uni = resilience(J_uni), rea_uni = reactivity(J_uni),
+            rmed_uni = median_return_rate(J_uni, u_uni),
+            long_rmed_uni = median_return_rate(J_uni, u_uni; t=0.5),
+            
+            res_rarer = resilience(J_rarer), rea_rarer = reactivity(J_rarer),
+            rmed_rarer = median_return_rate(J_rarer, filter(!iszero, u_rarerem)),
+            long_rmed_rarer = median_return_rate(J_rarer, filter(!iszero, u_rarerem); t=0.5),
+            
+            res_rew = resilience(J_rew), rea_rew = reactivity(J_rew),
+            rmed_rew = median_return_rate(J_rew, u),
+            long_rmed_rew = median_return_rate(J_rew, u; t=0.5),
         ))
     end
 
@@ -425,29 +565,32 @@ end
 # --------------------------
 df_tr = run_sweep_stable(
     ; modes=[:TR], S_vals=[120], conn_vals=0.05:0.05:0.30,
-      mean_abs_vals=[1.0], mag_cv_vals=[0.1],
+      mean_abs_vals=[0.5, 1.0, 2.0], mag_cv_vals=[0.01, 0.1, 0.5, 1.0, 2.0],
       u_mean_vals=[1.0], u_cv_vals=[0.3,0.5,0.8,1.0,2.0,3.0],
-      degree_families = [:uniform],# :lognormal, :pareto],
+      degree_families = [:uniform, :lognormal, :pareto],
       deg_cv_vals   = [0.0, 0.5, 1.0, 2.0],
       deg_pl_alphas = [1.2, 1.5, 2.0, 3.0],
       rho_sym_vals  = range(0, 1, length=10),
-      reps_per_combo=2, seed=42, number_of_combinations=500,
+      reps_per_combo=2, seed=42, number_of_combinations=1500,
       margin=0.05, shrink_factor=0.9, max_shrink_iter=200, q_thresh=0.20
 )
 print_structure_summary(df_tr)
-
 # ----------------------------- plotting: correlations ----------------------------
 """
 plot_correlations(df; steps=1:6, metrics=[:res, :rea])
 
 Scatter of Full vs Step k with 1:1 line and R² to y=x.
 """
-function plot_correlations(df::DataFrame; steps=["row", "thr", "uni", "thr_row", "row_uni", "thr_uni"], metrics=[:res, :rea], title="")
-    labels = Dict(:res=>"Resilience", :rea=>"Reactivity")
-    colors = [:steelblue, :orangered]
+function plot_correlations(
+    df::DataFrame;
+    steps=["reshuf", "thr", "row", "uni", "rarer", "rew"],
+    metrics=[:res, :rea, :rmed, long_rmed], title=""
+)
+    labels = Dict(:res=>"Resilience", :rea=>"Reactivity", :rmed=>"Rmed (t=0.01)", :long_rmed=>"Rmed (t=0.5)")
+    colors = [:steelblue, :orangered, :seagreen, :purple]
 
-    fig = Figure(size=(1100, 520))
-    Label(fig[0, 1:6], title; fontsize=18, font=:bold, halign=:left)
+    fig = Figure(size=(1100, 725))
+    Label(fig[0, 2:5], title; fontsize=18, font=:bold, halign=:left)
 
     for (mi, m) in enumerate(metrics)
         xname = Symbol(m, :_full)
@@ -465,7 +608,10 @@ function plot_correlations(df::DataFrame; steps=["row", "thr", "uni", "thr_row",
                 end
             end
             if isempty(x)
-                Axis(fig[mi, si]; title="$(labels[m]) — S$s", xgridvisible=false, ygridvisible=false)
+                Axis(
+                    fig[mi, si];
+                    title="$(labels[m]) — S$s",
+                    xgridvisible=false, ygridvisible=false)
                 continue
             end
 
@@ -479,13 +625,13 @@ function plot_correlations(df::DataFrame; steps=["row", "thr", "uni", "thr_row",
 
             ax = Axis(
                 fig[mi, si];
-                title="$(labels[m]) — Step $s",
+                title="$(labels[m]) — $s",
                 xlabel=string(xname), ylabel=string(yname),
                 limits=((mn, mx), (mn, mx)),
                 xgridvisible=false, ygridvisible=false,
-                xticklabelsize=11, yticklabelsize=11,
+                xticklabelsize=10, yticklabelsize=10,
                 xlabelsize=12, ylabelsize=12,
-                titlesize=12
+                titlesize=11
             )
 
             scatter!(ax, x, y; color=colors[mi], markersize=4, alpha=0.35)
@@ -501,17 +647,15 @@ function plot_correlations(df::DataFrame; steps=["row", "thr", "uni", "thr_row",
 end
 
 # ----------------------------- run both modes, show plots ------------------------
-df_tr = filter(row -> row.shrink_alpha > 0.5, df_tr)
-# Non-trophic sweep
-df_tr_stable = filter(row -> row.mode == :NT, df_stable)
-plot_correlations(df_tr; metrics=[:res, :rea],
-                  title="Trophic (heterogeneus abundances, 4th step is remove rare)")# — Full vs 6-steps Jacobian simplifications")
+df_tr_stable = filter(row -> row.shrink_alpha > 0.5, df_high_IS)
+# Trophic
+plot_correlations(df_tr; metrics=[:res, :rea, :rmed, :long_rmed],
+                  title="Trophic (heterogeneus abundances)")# — Full vs 6-steps Jacobian simplifications")
 
 # Trophic sweep
 df_nt_stable = filter(row -> row.shrink_alpha > 0.5, df_nt)
-# df_tr = filter(row -> row.mode == :TR, df_stable)
-plot_correlations(df_nt; metrics=[:res, :rea],
-                  title="Non-trophic — Full vs 6-steps Jacobian simplifications")
+plot_correlations(df_nt; metrics=[:res, :rea, :rmed, :long_rmed],
+                  title="Non-trophic (heterogeneus abundances)")
 ###################################################################################
 function plot_stability_metrics(df; title="Stability metrics vs symmetry coefficient")
     fig = Figure(size=(1000, 400))
