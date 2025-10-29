@@ -56,8 +56,8 @@ function plot_r2_grid_rho(summary; metric::Symbol=:res_full, steps::Vector{Symbo
 
             isempty(df_sub) && continue
             p = sortperm(df_sub.rho_sym)
-            lines!(ax, df_sub.rho_sym[p], df_sub.r2[p]; color=palette[mi], label=string(mode))
-            scatter!(ax, df_sub.rho_sym[p], df_sub.r2[p]; color=palette[mi], markersize=6)
+            lines!(ax, df_sub.rho_sym[p], df_sub.r2_corrected[p]; color=palette[mi], label=string(mode))
+            scatter!(ax, df_sub.rho_sym[p], df_sub.r2_corrected[p]; color=palette[mi], markersize=6)
         end
 
         if i == 1
