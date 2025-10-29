@@ -62,15 +62,15 @@ df_abund = run_sweep_stable(
     ; modes=[:TR],
       S_vals=[120],
       u_cv_vals=[0.0, 0.3, 0.5, 1.0, 2.0, 3.0],
-      degree_families=[:uniform],
-      rho_sym_vals=[0.0],
+      degree_families=[:lognormal],
+      rho_sym_vals=[1.0],
       number_of_combinations=400,
       reps_per_combo=2,
       seed=11
 )
 df_abund = filter(row -> row.shrink_alpha > 0.5, df_abund)
-plot_metrics(df_abund; xvar=:u_cv, title="Effect of abundance heterogeneity")
-plot_metrics_box(df_abund; xvar=:u_cv, title="Effect of abundance heterogeneity")
+plot_metrics(df_abund; xvar=:u_cv, title="Effect of abundance heterogeneity (lognormal abundance & rho=1)")
+plot_metrics_box(df_abund; xvar=:u_cv, title="Effect of abundance heterogeneity (lognormal abundance & rho=1)")
 ################################################################################
 # Sweep 2 — Degree heterogeneity
 ################################################################################
@@ -81,13 +81,13 @@ df_degree = run_sweep_stable(
       u_cv_vals=[1.0],
       degree_families=[:uniform, :lognormal, :pareto],
       deg_cv_vals=[0.0, 0.5, 1.0, 2.0],
-      rho_sym_vals=[0.0],
+      rho_sym_vals=[1.0],
       number_of_combinations=200,
       reps_per_combo=2,
       seed=22
 )
-plot_metrics(df_degree; xvar=:deg_cv_all, title="Effect of degree heterogeneity")
-plot_metrics_box(df_degree; xvar=:deg_cv_all, title="Effect of degree heterogeneity (rel)")
+plot_metrics(df_degree; xvar=:deg_cv_all, title="Effect of degree heterogeneity (rho=1)")
+plot_metrics_box(df_degree; xvar=:deg_cv_all, title="Effect of degree heterogeneity (rho=1)")
 ################################################################################
 # Sweep 3 — Trophic symmetry (pairwise correlation)
 ################################################################################
@@ -103,7 +103,26 @@ df_sym = run_sweep_stable(
       seed=33
 )
 plot_metrics(df_sym; xvar=:rho_sym, title="Effect of trophic symmetry")
-plot_metrics_box(df_sym; xvar=:rho_sym, title="Effect of trophic symmetry (rel)")
+plot_metrics_box(df_sym; xvar=:rho_sym, title="Effect of trophic symmetry")
+################################################################################
+# Sweep 4 — Mean interaction strength (IS)
+################################################################################
+println("Running interaction strength (IS) sweep...")
+df_IS = run_sweep_stable(
+    ; modes=[:TR],
+      S_vals=[120],
+      u_cv_vals=[1.0],
+      degree_families=[:lognormal],
+      rho_sym_vals=[1.0],
+      mean_abs_vals=range(0.01, 1.3, length=12),
+      number_of_combinations=200,
+      reps_per_combo=2,
+      seed=44
+)
+# optional filtering, same as in abundance case
+df_IS = filter(row -> row.shrink_alpha > 0.5, df_IS)
+plot_metrics(df_IS; xvar=:mean_abs, title="Effect of mean interaction strength (ρ=1.0, lognormal degrees)")
+plot_metrics_box(df_IS; xvar=:mean_abs, title="Effect of mean interaction strength (ρ=1.0, lognormal degrees)")
 ################################################################################
 # Combined summary — mean ± SD across sweeps
 ################################################################################
@@ -117,6 +136,7 @@ end
 summary_abund  = summarize_sweep(df_abund, :u_cv)
 summary_degree = summarize_sweep(df_degree, :deg_cv_all)
 summary_sym    = summarize_sweep(df_sym, :rho_sym)
+summary_IS = summarize_sweep(df_IS, :mean_abs)
 
 save("summary_abundance.csv", summary_abund)
 save("summary_degree.csv", summary_degree)
