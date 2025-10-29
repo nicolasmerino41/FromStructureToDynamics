@@ -230,7 +230,7 @@ function plot_rmed_sweep(
     display(fig)
 end
 
-df_rmed_sweep, t_vals = sweep_rmeds(;
+df_rmed_sweep_long, t_vals_long = sweep_rmeds(;
     modes=[:TR], S_vals=[120], conn_vals=0.05:0.05:0.30,
     mean_abs_vals=[0.5, 1.0, 2.0], mag_cv_vals=[0.01, 0.1, 0.5, 1.0, 2.0],
     u_mean_vals=[1.0], u_cv_vals=[0.3,0.5,0.8,1.0,2.0,3.0],
@@ -240,10 +240,10 @@ df_rmed_sweep, t_vals = sweep_rmeds(;
     rho_sym_vals  = range(0, 1, length=10),
     reps_per_combo=2, seed=42, number_of_combinations=500,
     margin=0.05, shrink_factor=0.9, max_shrink_iter=200, q_thresh=0.20,
-    t_min=0.01, t_max=0.2, t_bins=12
+    t_min=0.01, t_max=10.0, t_bins=10
 )
 
 plot_rmed_sweep(
-    df_rmed_sweep;
-    t_steps=8:12, title="Rmed Dynamics Sweep"
+    df_rmed_sweep_long;
+    t_steps=[1,4,7,9], title="Rmed Dynamics Sweep 0.01-10.0.0-10 steps"
 )
