@@ -11,7 +11,6 @@
 # and your corrected median-return-rate (Arnoldi) function.
 # If not, `include("MainCode.jl")` before running.
 #########################################################
-
 using Random, Statistics, LinearAlgebra, DataFrames, CairoMakie
 
 # --- If your r̃med function has a different name, alias it here ---
@@ -43,11 +42,11 @@ Base.@kwdef struct ISOptions
     conn::Float64 = 0.10
     mean_abs::Float64 = 0.10
     mag_cv::Float64 = 0.60
-    degree_family::Symbol = :uniform            # :uniform | :lognormal | :pareto
+    degree_family::Symbol = :lognormal            # :uniform | :lognormal | :pareto
     deg_param::Float64 = 0.0                    # CV for lognormal, alpha for pareto
     rho_sym::Float64 = 0.0
     u_mean::Float64 = 1.0
-    u_cv::Float64 = 0.5
+    u_cv::Float64 = 0.8
     IS_targets::Vector{Float64} = collect(0.02:0.02:0.20)  # desired realized mean |A| (off-diag)
     reps::Int = 100
     q_thresh::Float64 = 0.20                    # threshold q for op_threshold_alpha
@@ -107,14 +106,17 @@ Output `df` has one row per (mode,rep,IS_target). `summary` gives R², slope,
 intercept of step vs full per IS level and metric.
 """
 function run_is_predictability(opts::ISOptions)
-    rng_global = Random.Xoshiro(opts.seed)
+    base = _splitmix64(UInt64(opts.seed))
+    buckets = [Vector{NamedTuple}() for _ in 1:nthreads()]
 
-    rows = Vector{NamedTuple}()
-    pushrow(x) = push!(rows, x)
+    Threads.@threads for idx_mode in eachindex(opts.modes)
+        mode = opts.modes[idx_mode]
 
-    for mode in opts.modes
+        # thread-local RNG: deterministic per mode/thread combination
+        rng_mode = Random.Xoshiro(_splitmix64(base ⊻ UInt64(idx_mode + 1234 * threadid())))
+
         for r in 1:opts.reps
-            rng = Random.Xoshiro(rand(rng_global, UInt64))
+            rng = Random.Xoshiro(rand(rng_mode, UInt64))
 
             # build base A and u once per replicate
             A0 = _genA(mode, rng, opts.S; conn=opts.conn, mean_abs=opts.mean_abs,
@@ -143,10 +145,10 @@ function run_is_predictability(opts::ISOptions)
                 u_rarerem = remove_rarest_species(u; p=0.1)
 
                 J_reshuf = build_J_from(α_reshuf, u)
-                J_row    = build_J_from(α_row,    u)
-                J_thr    = build_J_from(α_thr,    u)
-                J_uni    = build_J_from(α,        u_uni)
-                J_rarer  = build_J_from(α,        u_rarerem)
+                J_row    = build_J_from(α_row, u)
+                J_thr    = build_J_from(α_thr, u)
+                J_uni    = build_J_from(α, u_uni)
+                J_rarer  = build_J_from(α, u_rarerem)
 
                 # REW: redraw from the same ensemble, then rescale to same IS
                 A_rew0 = _genA(mode, rng, opts.S; conn=opts.conn, mean_abs=opts.mean_abs,
@@ -159,10 +161,10 @@ function run_is_predictability(opts::ISOptions)
                 metThr = _metrics(J_thr,    u;         t_short=opts.t_short, t_long=opts.t_long)
                 metRow = _metrics(J_row,    u;         t_short=opts.t_short, t_long=opts.t_long)
                 metUni = _metrics(J_uni,    u_uni;     t_short=opts.t_short, t_long=opts.t_long)
-                metRar = _metrics(J_rarer,  u_rarerem; t_short=opts.t_short, t_long=opts.t_long)
+                metRar = _metrics(J_rarer,  filter(!iszero, u_rarerem); t_short=opts.t_short, t_long=opts.t_long)
                 metRew = _metrics(J_rew,    u;         t_short=opts.t_short, t_long=opts.t_long)
 
-                pushrow((;
+                push!(buckets[threadid()], (;
                     mode, rep=r, IS_target=IS_tgt,
                     # realized structure at this scale
                     conn_real = realized_connectance(A),
@@ -182,7 +184,7 @@ function run_is_predictability(opts::ISOptions)
         end
     end
 
-    df = DataFrame(rows)
+    df = DataFrame(vcat(buckets...))
 
     # --- Summaries: R² (and slope/intercept) vs IS per step ------------
     function summarize(df; metric_sym::Symbol, steps::Vector{Symbol}, stable_only::Bool=false)
@@ -196,8 +198,8 @@ function run_is_predictability(opts::ISOptions)
                 for step in steps
                     y = d[!, Symbol(replace(string(metric_sym), "_full" => "_"*String(step)))]
                     r2, slope, intercept = r2_to_identity(collect(x), collect(y))
-                    push!(out, (; mode, IS_target=IS, metric=String(metric_sym), step=String(step), r2, slope, intercept,
-                                  n=length(x), stable_only))
+                    push!(out, (; mode, IS_target=IS, metric=String(metric_sym), step=String(step),
+                                  r2, slope, intercept, n=length(x), stable_only))
                 end
             end
         end
@@ -220,48 +222,37 @@ function run_is_predictability(opts::ISOptions)
 end
 
 # -------------------------------
-# Plotting helpers
-# -------------------------------
-function plot_predictability_vs_IS(summary; metric::String, title::String="Predictability vs IS", modes=[:TR])
-    steps = unique(summary.step)
-    fig = Figure(size=(1000, 420))
-    cols = length(steps)
-    for (j, mode) in enumerate(modes)
-        ax = Axis(fig[j,1]; xlabel="IS_target (mean |A|)", ylabel="R² to y=x", title="$title — $mode — $metric",
-                  ylimits=(-0.5, 1.05))
-        for step in steps
-            d = filter(row -> row.mode==mode && row.metric==metric && !row.stable_only && row.step==step, summary)
-            isempty(d) && continue
-            p = sortperm(d.IS_target)
-            lines!(ax, d.IS_target[p], d.r2[p]; label=step)
-            scatter!(ax, d.IS_target[p], d.r2[p])
-        end
-        axislegend(ax; position=:rb)
-    end
-    display(fig)
-    return fig
-end
-
-# -------------------------------
 # Example run (trophic focus)
 # -------------------------------
-if abspath(PROGRAM_FILE) == @__FILE__
-    opts = ISOptions(; modes=[:TR], S=120, conn=0.10,
-        mean_abs=0.10, mag_cv=0.60,
-        degree_family=:uniform, deg_param=0.0,
-        rho_sym=0.3, u_mean=1.0, u_cv=0.8,
-        IS_targets=collect(0.02:0.02:0.20), reps=150,
-        q_thresh=0.20, t_short=0.01, t_long=0.50, seed=20251027)
+opts = ISOptions(
+    ; modes=[:TR], S=120, conn=0.10,
+    mean_abs=0.10, mag_cv=0.60,
+    degree_family=:pareto, deg_param=1.1,
+    rho_sym=0.0, u_mean=1.0, u_cv=0.8,
+    IS_targets=collect(0.02:0.04:1.2), reps=150,
+    q_thresh=0.20, t_short=0.01, t_long=5.0, seed=20251027
+)
 
-    df, summ = run_is_predictability(opts)
-    println("\nRows: ", nrow(df))
+df_pareto, summ_pareto = run_is_predictability(opts)
+println("\nRows: ", nrow(df))
 
-    # Save and plot
-    CSV.write("is_predictability_raw.csv", df)
-    CSV.write("is_predictability_summary.csv", summ)
+# Save and plot
+CSV.write("is_predictability_raw.csv", df)
+CSV.write("is_predictability_summary.csv", summ)
 
-    plot_predictability_vs_IS(summ; metric="res_full",   title="Resilience predictability vs IS", modes=opts.modes)
-    plot_predictability_vs_IS(summ; metric="rea_full",   title="Reactivity predictability vs IS", modes=opts.modes)
-    plot_predictability_vs_IS(summ; metric="rmed_s_full",title="r̃med(t_short) predictability vs IS", modes=opts.modes)
-    plot_predictability_vs_IS(summ; metric="rmed_l_full",title="r̃med(t_long) predictability vs IS",  modes=opts.modes)
-end
+include("Plot_IS_PredictabilitySweep.jl")
+summ = summ_pareto
+summ.r2_corrected = summ.r2
+summ.r2_corrected[summ.r2 .< 0] .= 0.0
+plot_predictability_vs_IS(summ; metric="res_full",   title="Resilience predictability vs IS (pareto)", modes=opts.modes)
+plot_predictability_vs_IS(summ; metric="rea_full",   title="Reactivity predictability vs IS (pareto)", modes=opts.modes)
+plot_predictability_vs_IS(summ; metric="rmed_s_full",title="r̃med(t_short) predictability vs IS (pareto)", modes=opts.modes)
+plot_predictability_vs_IS(summ; metric="rmed_l_full",title="r̃med(t_long) predictability vs IS (pareto)",  modes=opts.modes)
+
+plot_r2_grid(
+    summ;
+    metric=:rmed_l_full,
+    steps=[:rew, :thr, :row, :reshuf, :rarer, :uni],
+    modes=[:TR],
+    title="Rmed(t_VeryLong) Predictability (R² vs IS)"
+)
