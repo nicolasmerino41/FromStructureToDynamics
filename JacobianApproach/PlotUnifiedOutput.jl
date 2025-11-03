@@ -67,10 +67,16 @@ end
 ###############################
 # 2) R² vs t summary
 ###############################
-function plot_rmed_time_summary(df_t::DataFrame)
+function plot_rmed_time_summary(
+    df_t::DataFrame;
+    title = "Predictability of r̃med vs t"
+)
     fig = Figure(size=(800, 450))
-    ax = Axis(fig[1,1]; xscale=log10, xlabel="t", ylabel="R² (vs full)",
-              title="Predictability of r̃med vs t")
+    ax = Axis(
+        fig[1,1];
+        xscale=log10, xlabel="t", ylabel="R² (vs full)",
+        title=title
+    )
 
     # reconstruct long form from per-t r_* columns if needed
     steps = [:row, :thr, :reshuf, :rew, :ushuf, :rarer]
@@ -174,14 +180,14 @@ end
 ###############################
 # 4) Example usage
 ###############################
-# after running:
-# df_main, df_t = run_sweep_stable(...)
-
 # correlation grid:
-plot_correlations(df_main)
+plot_correlations(df_main_uniform)
 
 # R² vs t:
-A = plot_rmed_time_summary(df_t)
+A = plot_rmed_time_summary(
+    df_t_uniform;
+    title="Predictability of r̃med vs t (rmed non weighted)",
+)
 
 # R² vs t by step and IS:
 fig = plot_step_grid_by_IS_progressive(df_t; cmap=:viridis)
