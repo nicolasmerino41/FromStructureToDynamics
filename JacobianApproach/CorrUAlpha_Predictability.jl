@@ -405,7 +405,7 @@ opts = CorrTimescaleSweepOptions(;
     deg_cv_vals = [0.0, 0.5, 1.0, 2.0],
     deg_pl_alphas = [1.2, 1.5, 2.0, 3.0],
     rho_sym_vals = [0.0, 0.5, 1.0],
-    IS_lines = [1.0], #[0.05, 0.10, 0.40, 0.80, 1.20],
+    IS_lines = [0.05, 0.10, 0.40, 0.80, 1.20],
     reps_per_combo = 3,
     number_of_combinations = 500,
     rho_c_vals = 0.0:0.1:1.0,
@@ -414,7 +414,7 @@ opts = CorrTimescaleSweepOptions(;
     seed = 20251030
 )
 
-df_raw1, df_sum1 = run_corr_timescale_interaction_sweep(opts)
+df_raw, df_sum = run_corr_timescale_interaction_sweep(opts)
 plot_corr_timescale_grid_by_IS(df_sum; title="R² of r̃med(t=5.0) vs correlation(u,|α|)")
 
 ################# EXTENSION WITH BASELINE #################
@@ -527,6 +527,6 @@ bas = r2_baselines_long_from_df_main(df_main;
 # 2) After run_corr_timescale_interaction_sweep(...):
 # df_raw, df_sum = run_corr_timescale_interaction_sweep(opts)
 plot_corr_timescale_grid_by_IS_with_baseline(
-    df_sum1; baselines=bas,
+    df_sum; baselines=bas,
     title = "R² vs corr(u,|α|) — baselines at r̃med(t=5)"
 )
