@@ -428,7 +428,7 @@ function run_sweep_stable(
       mean_abs_vals = [0.05, 0.10, 0.20],
       mag_cv_vals   = [0.4, 0.6, 1.0],
       u_mean_vals   = [1.0],
-      u_cv_vals     = [0.5],
+      u_cv_vals     = [0.01, 0.25, 0.5, 1.0, 2.0],
       degree_families = [:uniform, :lognormal, :pareto],
       deg_cv_vals   = [0.0, 0.5, 1.0, 2.0],
       deg_pl_alphas = [1.2, 1.5, 2.0, 3.0],
@@ -437,7 +437,8 @@ function run_sweep_stable(
       reps_per_combo = 2,
       seed = 1234, number_of_combinations = 10_000,
       q_thresh = 0.20,
-      long_time_value = 0.5
+      long_time_value = 0.5,
+      u_weighted_biomass = :biomass
 )
     genA(mode, rho_sym, rng, conn, mean_abs, mag_cv, deg_fam, deg_param, S) = mode === :NT ? 
         build_random_nontrophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
@@ -481,10 +482,10 @@ function run_sweep_stable(
 
         # A = genA(mode, rho_sym, rng, conn, mean_abs, mag_cv, deg_fam, deg_param, S)
 
-        A0 = build_niche_trophic(
-            S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
-            degree_family=deg_fam, deg_param=deg_param, rho_sym=rho_sym, rng=rng
-        )
+        A0 = build_niche_trophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
+                             degree_family=deg_fam, deg_param=deg_param,
+                             rho_sym=rho_sym, rng=rng)
+
         baseIS = realized_IS(A0)
         baseIS == 0 && continue
         β = mean_abs / baseIS
@@ -548,52 +549,55 @@ function run_sweep_stable(
             # full (stable)
             res_full = resilience(J_full), min_u = minimum(u), diff_res_min_u = -resilience(J_full) - minimum(u),
             rea_full = reactivity(J_full),
-            rmed_full = median_return_rate(J_full, u; t=0.01, perturbation=:biomass),
-            long_rmed_full = median_return_rate(J_full, u; t=long_time_value, perturbation=:biomass),
+            rmed_full = median_return_rate(J_full, u; t=0.01, perturbation=u_weighted_biomass),
+            long_rmed_full = median_return_rate(J_full, u; t=long_time_value, perturbation=u_weighted_biomass),
             
             res_rel_to_min_u_full = resilience(J_full) / minimum(u),
             rea_rel_to_min_u_full = reactivity(J_full) / minimum(u),
-            rmed_rel_to_min_u_full = median_return_rate(J_full, u) / minimum(u),
+            rmed_rel_to_min_u_full = median_return_rate(J_full, u; t=0.01, perturbation=u_weighted_biomass) / minimum(u),
 
             # ---- STEPS ----
             res_reshuf = resilience(J_reshuf), rea_reshuf = reactivity(J_reshuf),
-            rmed_reshuf = median_return_rate(J_reshuf, u),
-            long_rmed_reshuf = median_return_rate(J_reshuf, u; t=long_time_value),
+            rmed_reshuf = median_return_rate(J_reshuf, u; t=0.01, perturbation=u_weighted_biomass),
+            long_rmed_reshuf = median_return_rate(J_reshuf, u; t=long_time_value, perturbation=u_weighted_biomass),
             
             res_thr = resilience(J_thr), rea_thr = reactivity(J_thr),
-            rmed_thr = median_return_rate(J_thr, u),
-            long_rmed_thr = median_return_rate(J_thr, u; t=long_time_value),
+            rmed_thr = median_return_rate(J_thr, u; t=0.01, perturbation=u_weighted_biomass),
+            long_rmed_thr = median_return_rate(J_thr, u; t=long_time_value, perturbation=u_weighted_biomass),
             
             res_row = resilience(J_row), rea_row = reactivity(J_row), 
-            rmed_row = median_return_rate(J_row, u),
-            long_rmed_row = median_return_rate(J_row, u; t=long_time_value),
+            rmed_row = median_return_rate(J_row, u; t=0.01, perturbation=u_weighted_biomass),
+            long_rmed_row = median_return_rate(J_row, u; t=long_time_value, perturbation=u_weighted_biomass),
             
             res_uni = resilience(J_uni), rea_uni = reactivity(J_uni),
-            rmed_uni = median_return_rate(J_uni, u_uni),
-            long_rmed_uni = median_return_rate(J_uni, u_uni; t=long_time_value),
+            rmed_uni = median_return_rate(J_uni, u_uni; t=0.01, perturbation=u_weighted_biomass),
+            long_rmed_uni = median_return_rate(J_uni, u_uni; t=long_time_value, perturbation=u_weighted_biomass),
             
             res_rarer = resilience(J_rarer), rea_rarer = reactivity(J_rarer),
-            rmed_rarer = median_return_rate(J_rarer, filter(!iszero, u_rarerem)),
-            long_rmed_rarer = median_return_rate(J_rarer, filter(!iszero, u_rarerem); t=long_time_value),
+            rmed_rarer = median_return_rate(J_rarer, filter(!iszero, u_rarerem); t=0.01, perturbation=u_weighted_biomass),
+            long_rmed_rarer = median_return_rate(J_rarer, filter(!iszero, u_rarerem); t=long_time_value, perturbation=u_weighted_biomass),
             
             res_rew = resilience(J_rew), rea_rew = reactivity(J_rew),
-            rmed_rew = median_return_rate(J_rew, u),
-            long_rmed_rew = median_return_rate(J_rew, u; t=long_time_value),
+            rmed_rew = median_return_rate(J_rew, u; t=0.01, perturbation=u_weighted_biomass),
+            long_rmed_rew = median_return_rate(J_rew, u; t=long_time_value, perturbation=u_weighted_biomass),
+
+            A=A, u=u, J_full=J_full
         ))
+
         # collect per-t raw rows
-        for t in 10 .^ range(log10(0.01), log10(100.0); length=10)
-            r_full = median_return_rate(J, u; t=t, perturbation=:biomass)
+        for t in 10 .^ range(log10(0.01), log10(100.0); length=20)
+            r_full = median_return_rate(J, u; t=t, perturbation=u_weighted_biomass)
             push!(bucket_t[threadid()], (;
                 mode, S, conn, mean_abs, mag_cv, u_mean, u_cv,
                 degree_family=deg_fam, degree_param=deg_param, rho_sym,
                 IS_real=IS_real, t=t,
                 r_full,
-                r_row    = median_return_rate(J_row,  u;    t=t, perturbation=:biomass),
-                r_thr    = median_return_rate(J_thr,  u;    t=t, perturbation=:biomass),
-                r_reshuf = median_return_rate(J_reshuf,  u;    t=t, perturbation=:biomass),
-                r_rew    = median_return_rate(J_rew,  u;    t=t, perturbation=:biomass),
-                r_ushuf  = median_return_rate(J_uni,  u_uni; t=t, perturbation=:biomass),
-                r_rarer  = median_return_rate(J_rarer,  filter(!iszero, u_rarerem); t=t, perturbation=:biomass)
+                r_row    = median_return_rate(J_row,  u;    t=t, perturbation=u_weighted_biomass),
+                r_thr    = median_return_rate(J_thr,  u;    t=t, perturbation=u_weighted_biomass),
+                r_reshuf = median_return_rate(J_reshuf,  u;    t=t, perturbation=u_weighted_biomass),
+                r_rew    = median_return_rate(J_rew,  u;    t=t, perturbation=u_weighted_biomass),
+                r_ushuf  = median_return_rate(J_uni,  u_uni; t=t, perturbation=u_weighted_biomass),
+                r_rarer  = median_return_rate(J_rarer,  filter(!iszero, u_rarerem); t=t, perturbation=u_weighted_biomass)
             ))
         end
     end
@@ -609,18 +613,20 @@ end
 # --------------------------
 # Minimal example run
 # --------------------------
-@time df_main05, df_t05 = run_sweep_stable(
+@time df_main, df_t = run_sweep_stable(
     ; modes=[:TR], S_vals=[120], conn_vals=0.05:0.05:0.30,
-      mean_abs_vals=[0.5], #[0.05, 0.10, 0.40, 0.80, 1.20],
+      mean_abs_vals=[0.05, 0.10, 0.40, 0.80, 1.20],
       mag_cv_vals=[0.01, 0.1, 0.5, 1.0, 2.0],
-      u_mean_vals=[1.0], u_cv_vals=[0.3,0.5,0.8,1.0,2.0,3.0],
+      u_mean_vals=[1.0], 
+      u_cv_vals=[0.3,0.5,0.8,1.0,2.0,3.0],
       degree_families = [:uniform, :lognormal, :pareto],
       deg_cv_vals   = [0.0, 0.5, 1.0, 2.0],
       deg_pl_alphas = [1.2, 1.5, 2.0, 3.0],
-      rho_sym_vals  = [0.0, 0.5, 1.0],#range(0, 1, length=10),
-      reps_per_combo=4, seed=42, number_of_combinations=500,
+      rho_sym_vals  = [0.0, 0.5, 1.0], # range(0, 1, length=10),
+      reps_per_combo=4, seed=42, number_of_combinations=2000,
       margin=0.05, shrink_factor=0.9, max_shrink_iter=200, q_thresh=0.20,
-      long_time_value=5.0
+      long_time_value=5.0,
+      u_weighted_biomass=:biomass
 )
 print_structure_summary(df_tr)
 # ----------------------------- plotting: correlations ----------------------------
@@ -730,7 +736,7 @@ function plot_stability_metrics(df; title="Stability metrics vs symmetry coeffic
     display(fig)
 end
 
-plot_stability_metrics(df_tr)
+plot_stability_metrics(df_main; title="Stability metrics vs symmetry coefficient")
 
 ############################
 # 3) Structural summary (unchanged)
@@ -761,3 +767,5 @@ function print_structure_summary(df::DataFrame)
         end
     end
 end
+
+print_structure_summary(df_main)
