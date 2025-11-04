@@ -108,7 +108,7 @@ function plot_steps_vs_t_with_IS_halo(dt::DataFrame;
 
     save(fname, fig, px_per_unit=2)
     println("Saved $(fname)")
-    return fig
+    display(fig)
 end
 
 # --- Example usage ---
