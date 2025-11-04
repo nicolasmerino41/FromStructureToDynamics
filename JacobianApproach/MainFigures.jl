@@ -18,13 +18,12 @@ include("CorrUAlpha_Predictability.jl")   # provides run_corr_timescale_interact
 # -----------------------------------------------------------
 # Output dir
 # -----------------------------------------------------------
-const FIGDIR = "figs"
+const FIGDIR = "C:/Users/MM-1/OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/figs"
 isdir(FIGDIR) || mkpath(FIGDIR)
 
 # -----------------------------------------------------------
 # Small helpers (NEW; do not clash with yours)
 # -----------------------------------------------------------
-
 # 1) Row-spread index S_row: mean row CV of |α| over existing links
 function _row_spread_index(α::AbstractMatrix)
     S = size(α,1)
@@ -215,11 +214,11 @@ COMMON = (; modes=[:TR], S_vals=[120],
            mean_abs_vals=[0.05, 0.10, 0.40, 0.80, 1.20],
            mag_cv_vals=[0.01, 0.1, 0.5, 1.0, 2.0],
            u_mean_vals=[1.0],
-           u_cv_vals=[0.3,0.5,0.8,1.0,2.0,3.0],
+           u_cv_vals=range(0.3, 3.0, length=10),
            degree_families=[:uniform, :lognormal, :pareto],
            deg_cv_vals=[0.0, 0.5, 1.0, 2.0],
            deg_pl_alphas=[1.2, 1.5, 2.0, 3.0],
-           rho_sym_vals=[0.0, 0.5, 1.0],
+           rho_sym_vals=range(0.0, 1.0, length=10),
            reps_per_combo=4, seed=42, number_of_combinations=1000,
            margin=0.05, shrink_factor=0.9, max_shrink_iter=200, q_thresh=0.20,
            long_time_value=5.0)
