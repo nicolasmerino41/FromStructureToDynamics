@@ -137,9 +137,9 @@ function r2_by_IS(df_t::DataFrame; steps::Vector{Symbol}, min_n::Int=4)
     DataFrame(rows)
 end
 
-
 function plot_step_grid_by_IS_progressive(df_t::DataFrame;
-        steps::Vector{Symbol} = [:row, :thr, :reshuf, :rew, :ushuf, :rarer],
+        # steps::Vector{Symbol} = [:row, :thr, :reshuf, :rew, :ushuf, :rarer],
+        steps::Vector{Symbol} = [:reshuf, :rew, :ushuf, :row],
         cmap = :viridis,
         title::String = "Predictability of r̃med vs t — progressive IS palette")
 
@@ -190,4 +190,11 @@ A = plot_rmed_time_summary(
 )
 
 # R² vs t by step and IS:
-fig = plot_step_grid_by_IS_progressive(df_t; cmap=:viridis)
+df_t_B_lowIScv = filter(row -> row.mag_cv == 0.01, df_t_B)
+df_t_B_medIScv = filter(row -> row.mag_cv == 0.75, df_t_B)
+df_t_B_highIScv = filter(row -> row.mag_cv == 1.5, df_t_B)
+
+fig = plot_step_grid_by_IS_progressive(
+    df_t_uni; cmap=:viridis,
+    title="Predictability of r̃med vs t UNIFORM"
+)
