@@ -131,7 +131,7 @@ function run_predictability_vs_uhetero(opts::UHeteroOptions)
 
         for rep in 1:opts.reps
             rng = Random.Xoshiro(rand(rng0, UInt64))
-            A0, R = _build_A(opts.S; conn=opts.conn, mean_abs=opts.mean_abs, mag_cv=opts.mag_cv,
+            A0 = build_niche_trophic(opts.S; conn=opts.conn, mean_abs=opts.mean_abs, mag_cv=opts.mag_cv,
                           degree_family=opts.degree_family, deg_param=opts.deg_param,
                           rho_sym=opts.rho_sym, rng=rng)
             baseIS = realized_IS(A0)
@@ -206,7 +206,7 @@ function run_predictability_vs_khetero(opts::KHeteroOptions)
 
         for rep in 1:opts.reps
             rng = Random.Xoshiro(rand(rng0, UInt64))
-            A0, R = _build_A(opts.S; conn=opts.conn, mean_abs=opts.mean_abs, mag_cv=opts.mag_cv,
+            A0 = build_niche_trophic(opts.S; conn=opts.conn, mean_abs=opts.mean_abs, mag_cv=opts.mag_cv,
                           degree_family=:lognormal, deg_param=dcv,
                           rho_sym=opts.rho_sym, rng=rng)
             baseIS = realized_IS(A0); baseIS == 0 && continue
@@ -246,6 +246,79 @@ function run_predictability_vs_khetero(opts::KHeteroOptions)
     return df, DataFrame(rowsS)
 end
 
+# =====================================================================================
+# Sweep 3: Predictability vs INTERACTION-STRENGTH heterogeneity (mag_cv)
+# =====================================================================================
+Base.@kwdef struct ISHeteroOptions
+    S::Int = 120
+    conn::Float64 = 0.10
+    mean_abs::Float64 = 0.10
+    rho_sym::Float64 = 0.5
+    degree_family::Symbol = :lognormal
+    deg_param::Float64 = 0.5
+    u_mean::Float64 = 1.0
+    u_cv::Float64 = 0.6                    # fix abundance heterogeneity here
+    mag_cv_vals::Vector{Float64} = [0.1, 0.3, 0.6, 1.0, 1.5, 2.0]
+    IS_target::Float64 = 0.2
+    reps::Int = 100
+    q_thresh::Float64 = 0.20
+    t_short::Float64 = 0.01
+    t_long::Float64 = 10.0
+    seed::Int = 20251031
+end
+
+function run_predictability_vs_ishero(opts::ISHeteroOptions)
+    base = _splitmix64(UInt64(opts.seed))
+    bucket = [Vector{NamedTuple}() for _ in 1:nthreads()]
+
+    Threads.@threads for idx in eachindex(opts.mag_cv_vals)
+        mcv = opts.mag_cv_vals[idx]
+        rng0 = Random.Xoshiro(_splitmix64(base ⊻ UInt64(idx) ⊻ UInt64(threadid())))
+        local_rows = bucket[threadid()]
+
+        for rep in 1:opts.reps
+            rng = Random.Xoshiro(rand(rng0, UInt64))
+            A0 = build_niche_trophic(opts.S; conn=opts.conn, mean_abs=opts.mean_abs, mag_cv=mcv,
+                             degree_family=opts.degree_family, deg_param=opts.deg_param,
+                             rho_sym=opts.rho_sym, rng=rng)
+            baseIS = realized_IS(A0)
+            baseIS == 0 && continue
+            β = opts.IS_target / baseIS
+            A = β .* A0
+            u = random_u(opts.S; mean=opts.u_mean, cv=opts.u_cv, rng=rng)
+
+            mets = _compute_steps(A, u; q_thresh=opts.q_thresh, rng=rng,
+                                  t_short=opts.t_short, t_long=opts.t_long)
+
+            push!(local_rows, (; kind=:mag_cv, x=mcv,
+                res_full=mets.full.res, rea_full=mets.full.rea, rmed_s_full=mets.full.rmed_s, rmed_l_full=mets.full.rmed_l,
+                res_row=mets.row.res,   rea_row=mets.row.rea,   rmed_s_row=mets.row.rmed_s,   rmed_l_row=mets.row.rmed_l,
+                res_thr=mets.thr.res,   rea_thr=mets.thr.rea,   rmed_s_thr=mets.thr.rmed_s,   rmed_l_thr=mets.thr.rmed_l,
+                res_reshuf=mets.reshuf.res, rea_reshuf=mets.reshuf.rea, rmed_s_reshuf=mets.reshuf.rmed_s, rmed_l_reshuf=mets.reshuf.rmed_l,
+                res_rew=mets.rew.res,   rea_rew=mets.rew.rea,   rmed_s_rew=mets.rew.rmed_s,   rmed_l_rew=mets.rew.rmed_l,
+                res_ushuf=mets.ushuf.res, rea_ushuf=mets.ushuf.rea, rmed_s_ushuf=mets.ushuf.rmed_s, rmed_l_ushuf=mets.ushuf.rmed_l,
+                res_rarer=mets.rarer.res, rea_rarer=mets.rarer.rea, rmed_s_rarer=mets.rarer.rmed_s, rmed_l_rarer=mets.rarer.rmed_l))
+        end
+    end
+    df = DataFrame(vcat(bucket...))
+
+    steps = (:row, :thr, :reshuf, :rew, :ushuf, :rarer)
+    metrics = (:res, :rea, :rmed_s, :rmed_l)
+    rowsS = NamedTuple[]
+    for xval in sort(unique(df.x))
+        sub = df[df.x .== xval, :]
+        for m in metrics
+            x = sub[!, Symbol(m, :_full)]
+            for s in steps
+                y = sub[!, Symbol(m, :_, s)]
+                r2, slope, intercept = _r2_to_identity(collect(x), collect(y))
+                push!(rowsS, (; kind=:mag_cv, x=xval, metric=String(m), step=String(s), r2, slope, intercept, n=nrow(sub)))
+            end
+        end
+    end
+    return df, DataFrame(rowsS)
+end
+
 # ---------- progressive palette (6 lines) ----------
 # Progressive (continuous) palette: light → dark along a single colormap
 function _progressive_colors(n::Int)
@@ -258,7 +331,7 @@ function plot_predictability_2x2(summary::DataFrame; kind::Symbol, title::String
     @assert "metric" in names(summary) && "step" in names(summary) && "x" in names(summary)
     metrics = ["res","rea","rmed_s","rmed_l"]
     # steps = ["reshuf","thr","row","rew","ushuf","rarer"]  # fixed order
-    steps = ["ushuf","rarer"]  # fixed order
+    steps = ["ushuf","row","rew", "reshuf"]  # fixed order
     cols = _progressive_colors(length(steps))
 
     fig = Figure(size=(1050, 700))
@@ -266,7 +339,7 @@ function plot_predictability_2x2(summary::DataFrame; kind::Symbol, title::String
 
     for (pi, met) in enumerate(metrics)
         ax = Axis(fig[(pi-1) ÷ 2 + 1, (pi-1) % 2 + 1];
-                  xlabel = (pi ≥ 3 ? (kind==:u_cv ? "abundance CV" : "degree CV (lognormal)") : ""),
+                  xlabel = (pi ≥ 3 ? (kind==:u_cv ? "abundance CV" : kind==:mag_cv ? "magnitude CV" : "degree CV (lognormal)") : ""),
                   ylabel = (pi % 2 == 1 ? "R² vs full" : ""),
                   title  = met,
                   limits = (nothing, (-0.05, 1.05)))
@@ -296,3 +369,8 @@ plot_predictability_2x2(summ_u; kind=:u_cv, title="Predictability vs abundance h
 kh = KHeteroOptions(; deg_cv_vals=[0.0,0.25,0.5,1.0,1.5,2.0], reps=120, IS_target=0.2)
 df_k, summ_k = run_predictability_vs_khetero(kh)
 plot_predictability_2x2(summ_k; kind=:deg_cv, title="Predictability vs degree heterogeneity")
+
+# -- Interaction-strength heterogeneity sweep
+ish = ISHeteroOptions(; mag_cv_vals=[0.1,0.3,0.6,1.0,1.5,2.0], reps=120, IS_target=0.5)
+df_is, summ_is = run_predictability_vs_ishero(ish)
+plot_predictability_2x2(summ_is; kind=:mag_cv, title="Predictability vs IS heterogeneity BIOMASS")
