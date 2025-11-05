@@ -139,7 +139,7 @@ end
 
 function plot_step_grid_by_IS_progressive(df_t::DataFrame;
         # steps::Vector{Symbol} = [:row, :thr, :reshuf, :rew, :ushuf, :rarer],
-        steps::Vector{Symbol} = [:reshuf, :rew, :ushuf, :row],
+        steps::Vector{Symbol} = [:reshuf, :rew, :ushuf,:row],
         cmap = :viridis,
         title::String = "Predictability of r̃med vs t — progressive IS palette")
 
@@ -148,7 +148,7 @@ function plot_step_grid_by_IS_progressive(df_t::DataFrame;
     col = cgrad(cmap, length(IS_list), categorical=true)
     leg_labels = [@sprintf("IS=%.2f", v) for v in IS_list]
 
-    fig = Figure(size=(1100, 640))
+    fig = Figure(size=(1100, 575))
     Label(fig[0, 1:3], title; fontsize=18, font=:bold, halign=:center)
 
     for (i, step) in enumerate(steps)
@@ -170,7 +170,7 @@ function plot_step_grid_by_IS_progressive(df_t::DataFrame;
         end
 
         if i == 1
-            axislegend(ax; position=:lb, framevisible=false, nbanks=1)
+            axislegend(ax; position=:rc, framevisible=false, nbanks=1)
         end
     end
 
@@ -194,7 +194,8 @@ df_t_B_lowIScv = filter(row -> row.mag_cv == 0.01, df_t_B)
 df_t_B_medIScv = filter(row -> row.mag_cv == 0.75, df_t_B)
 df_t_B_highIScv = filter(row -> row.mag_cv == 1.5, df_t_B)
 
+df_t_shortGoodBio_rhoOne = filter(row -> row.rho_sym == 1.0, df_t_shortGoodBio)
 fig = plot_step_grid_by_IS_progressive(
-    df_t_uni; cmap=:viridis,
-    title="Predictability of r̃med vs t UNIFORM"
+    df_t_shortGoodBio_rhoOne; cmap=:viridis,
+    title="Predictability of r̃med vs t BIOMASS (rmed weighted), ρ=1.0"
 )
