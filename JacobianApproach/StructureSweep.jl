@@ -35,19 +35,6 @@ end
     return z ⊻ (z >>> 31)
 end
 
-# ---------- one place to build A ----------
-function _build_A(S; conn, mean_abs, mag_cv, degree_family, deg_param, rho_sym, rng)
-    if isdefined(@__MODULE__, :build_niche_trophic)
-        return build_niche_trophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
-                                   degree_family=degree_family, deg_param=deg_param,
-                                   rho_sym=rho_sym, rng=rng)
-    else
-        return build_random_trophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
-                                    degree_family=degree_family, deg_param=deg_param,
-                                    rho_sym=rho_sym, rng=rng)
-    end
-end
-
 # ---------- compute the four static metrics ----------
 @inline function _metrics4(J, u; t_short=0.01, t_long=10.0)
     return (
@@ -331,7 +318,7 @@ function plot_predictability_2x2(summary::DataFrame; kind::Symbol, title::String
     @assert "metric" in names(summary) && "step" in names(summary) && "x" in names(summary)
     metrics = ["res","rea","rmed_s","rmed_l"]
     # steps = ["reshuf","thr","row","rew","ushuf","rarer"]  # fixed order
-    steps = ["ushuf","row","rew", "reshuf"]  # fixed order
+    steps = ["reshuf"]  # fixed order
     cols = _progressive_colors(length(steps))
 
     fig = Figure(size=(1050, 700))
@@ -366,11 +353,11 @@ df_u, summ_u = run_predictability_vs_uhetero(uh)
 plot_predictability_2x2(summ_u; kind=:u_cv, title="Predictability vs abundance heterogeneity")
 
 # -- Degree heterogeneity sweep (lognormal)
-kh = KHeteroOptions(; deg_cv_vals=[0.0,0.25,0.5,1.0,1.5,2.0], reps=120, IS_target=0.2)
+kh = KHeteroOptions(; deg_cv_vals=[0.0,0.25,0.5,1.0,1.5,2.0], reps=120, IS_target=0.5)
 df_k, summ_k = run_predictability_vs_khetero(kh)
 plot_predictability_2x2(summ_k; kind=:deg_cv, title="Predictability vs degree heterogeneity")
 
 # -- Interaction-strength heterogeneity sweep
-ish = ISHeteroOptions(; mag_cv_vals=[0.1,0.3,0.6,1.0,1.5,2.0], reps=120, IS_target=0.5)
+ish = ISHeteroOptions(; mag_cv_vals=[0.0,0.3,0.6,1.0,1.5,2.0], reps=120, IS_target=0.1)
 df_is, summ_is = run_predictability_vs_ishero(ish)
 plot_predictability_2x2(summ_is; kind=:mag_cv, title="Predictability vs IS heterogeneity BIOMASS")
