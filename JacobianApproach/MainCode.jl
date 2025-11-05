@@ -265,6 +265,19 @@ function op_reshuffle_alpha(alpha::AbstractMatrix; rng=Random.default_rng())
     alpha_new
 end
 
+function op_reshuffle_preserve_pairs(alpha; rng=Random.default_rng())
+    S = size(alpha,1)
+    pairs = [(i,j) for i in 1:S for j in (i+1):S if alpha[i,j] != 0 && alpha[j,i] != 0]
+    perm = randperm(rng, length(pairs))
+    alpha_new = zeros(size(alpha))
+    for (k, (i,j)) in enumerate(pairs)
+        (p,q) = pairs[perm[k]]
+        alpha_new[i,j] = alpha[p,q]
+        alpha_new[j,i] = alpha[q,p]
+    end
+    alpha_new
+end
+
 function op_rowmean_alpha(alpha::AbstractMatrix)
     S = size(alpha,1)
     out = zeros(Float64, S, S)
@@ -277,6 +290,18 @@ function op_rowmean_alpha(alpha::AbstractMatrix)
                     out[i,j] = sign(alpha[i,j]) * mi
                 end
             end
+        end
+    end
+    out
+end
+function op_rowmean_alpha_global(alpha::AbstractMatrix)
+    S = size(alpha,1)
+    out = zeros(Float64, S, S)
+    nonz = [abs(alpha[i,j]) for i in 1:S, j in 1:S if i != j && alpha[i,j] != 0.0]
+    mi = isempty(nonz) ? 0.0 : mean(nonz)
+    for i in 1:S, j in 1:S
+        if i != j && alpha[i,j] != 0.0
+            out[i,j] = sign(alpha[i,j]) * mi
         end
     end
     out
@@ -432,8 +457,9 @@ function run_sweep_stable(
         # compute alpha and transformations
         alpha = alpha_off_from(J, u)
 
-        alpha_reshuf = op_reshuffle_alpha(alpha; rng=rng)
+        alpha_reshuf = op_reshuffle_preserve_pairs(alpha; rng=rng)
         alpha_row    = op_rowmean_alpha(alpha)
+        alpha_row    = op_rowmean_alpha_global(alpha)
         alpha_thr    = op_threshold_alpha(alpha; q=q_thresh)
 
         u_uni     = reshuffle_u(u; rng=rng)
@@ -531,7 +557,7 @@ end
 # --------------------------
 # Minimal example run
 # --------------------------
-@time df_main_B, df_t_B = run_sweep_stable(
+@time df_main_shortGoodBio, df_t_shortGoodBio = run_sweep_stable(
     ; modes=[:TR], S_vals=[120], conn_vals=0.05:0.05:0.30,
       mean_abs_vals=range(0.02, 1.3, length=5),
       mag_cv_vals=[0.01, 0.75, 1.5], #[0.01, 0.1, 0.5, 1.0, 2.0],
@@ -541,7 +567,7 @@ end
       deg_cv_vals   = [2.0], #[0.0, 0.5, 1.0, 2.0],
       deg_pl_alphas = [1.5], #[1.2, 1.5, 2.0, 3.0],
       rho_sym_vals  = range(0, 1, length=3),
-      reps_per_combo=1, seed=42, number_of_combinations=2430,
+      reps_per_combo=1, seed=42, number_of_combinations=500,
       margin=0.05, shrink_factor=0.9, max_shrink_iter=200, q_thresh=0.20,
       long_time_value=5.0,
       u_weighted_biomass=:biomass
@@ -555,6 +581,10 @@ df_main_bio = CSV.read("JacobianApproach/Objects/df_main_bio.csv", DataFrame)
 df_t_bio = CSV.read("JacobianApproach/Objects/df_t_bio.csv", DataFrame)
 df_main_uni = CSV.read("JacobianApproach/Objects/df_main_uni.csv", DataFrame)
 df_t_uni = CSV.read("JacobianApproach/Objects/df_t_uni.csv", DataFrame)
+df_main_B = CSV.read("JacobianApproach/Objects/df_main_bio_completeSmallSample.csv", DataFrame)
+df_t_B = CSV.read("JacobianApproach/Objects/df_t_bio_completeSmallSample.csv", DataFrame)
+df_t_bio_complete = CSV.read("JacobianApproach/Objects/df_t_bio80000.csv", DataFrame)
+
 # serialize("JacobianApproach/Objects/df_main_bio.jls", df_main)
 # serialize("JacobianApproach/Objects/df_t_bio.jls", df_t)
 # serialize("JacobianApproach/Objects/df_main_uni.jls", df_main_uni)
