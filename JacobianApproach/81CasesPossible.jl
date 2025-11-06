@@ -7,53 +7,8 @@ using CairoMakie
 using Base.Threads
 
 # ---------------- tiny helpers ----------------
-# R² to identity line y ~ x (clamped to [0,1])
-_r2_to_identity(x::AbstractVector, y::AbstractVector) = begin
-    n = length(x)
-    n == 0 && return 0.0
-    mu_y = mean(y)
-    sst = sum((y .- mu_y).^2)
-    ssr = sum((y .- x).^2)
-    sst == 0 ? (ssr == 0 ? 1.0 : 0.0) : max(1 - ssr/sst, 0.0)
-end
-
 # log-spaced time grid
 logspace10(a::Real, b::Real, n::Int) = 10 .^ range(a, b; length=n)
-
-# pick a builder that exists in your environment
-function _build_A(S; conn, mean_abs, mag_cv, degree_family, deg_param, rho_sym, rng)
-    if isdefined(@__MODULE__, :build_niche_trophic)
-        return build_niche_trophic(S; conn, mean_abs, mag_cv,
-            degree_family, deg_param, rho_sym, rng)
-    elseif isdefined(@__MODULE__, :build_random_trophic)
-        return build_random_trophic(S; conn, mean_abs, mag_cv,
-            degree_family, deg_param, rho_sym, rng)
-    else
-        error("Need build_niche_trophic or build_random_trophic in scope.")
-    end
-end
-
-# paired reshuffle: move each (i->j, j->i) pair together to preserve antisymmetry level
-function op_reshuffle_alpha_paired(alpha; rng=Random.default_rng())
-    S = size(alpha,1)
-    used = falses(S,S)
-    pairs = Tuple{Int,Int}[]
-    for i in 1:S, j in 1:S
-        (i == j || used[i,j]) && continue
-        push!(pairs, (i,j))
-        used[i,j] = true
-        used[j,i] = true
-    end
-    vals = [(alpha[i,j], alpha[j,i]) for (i,j) in pairs]
-    perm = randperm(rng, length(vals))
-    anew = zeros(eltype(alpha), S, S)
-    for (k, (i,j)) in enumerate(pairs)
-        v1, v2 = vals[perm[k]]
-        anew[i,j] = v1
-        anew[j,i] = v2
-    end
-    return anew
-end
 
 # ---------------- core evaluation for one community draw ----------------
 function _metrics_for_times(A, u, tgrid; rng, q_thresh=0.20, rho_sym=0.5)
@@ -65,7 +20,8 @@ function _metrics_for_times(A, u, tgrid; rng, q_thresh=0.20, rho_sym=0.5)
     J_ush = build_J_from(alpha, u_sh)
 
     # 2) reshuffle alpha (paired)
-    alpha_rp = op_reshuffle_alpha_paired(alpha; rng)
+    alpha_rp = op_reshuffle_preserve_pairs(alpha; rng)
+    # alpha_rp = op_reshuffle_alpha(alpha; rng)
     J_rp = build_J_from(alpha_rp, u)
 
     # 3) rewiring
@@ -102,7 +58,7 @@ function simulate_scenario(; S::Int=120, conn::Float64=0.10,
         tid = threadid()
         rng = Random.Xoshiro(rand(thread_rngs[tid], UInt64))
 
-        A0 = _build_A(S; conn, mean_abs, mag_cv, degree_family, deg_param, rho_sym, rng)
+        A0 = build_niche_trophic(S; conn, mean_abs, mag_cv, degree_family, deg_param, rho_sym, rng)
         baseIS = realized_IS(A0)
         if baseIS <= 0
             continue
@@ -170,7 +126,7 @@ function plot_scenarios(summaries; ncol::Int=3, savepath::Union{Nothing,String}=
     n = length(summaries)
     nrow = cld(n, ncol)
     fig = Figure(size=(1200, 360*nrow))
-    Label(fig[0,1:ncol], "Predictability (R² vs full) over time by scenario";
+    Label(fig[0,1:ncol], "Predictability (R² vs full) over time by scenario (RESHUF NOT PAIRED)";
           fontsize=22, font=:bold, halign=:left)
 
     for (k, (name, ts, r2u, r2p, r2w)) in enumerate(summaries)
@@ -182,7 +138,7 @@ function plot_scenarios(summaries; ncol::Int=3, savepath::Union{Nothing,String}=
                   title=name,
                   limits=((nothing, nothing), (-0.05, 1.05)))
         lines!(ax, ts, r2u,  label="ushuf")
-        lines!(ax, ts, r2p,  label="reshuf(pair)")
+        lines!(ax, ts, r2p,  label="reshuf(NOTpair)")
         lines!(ax, ts, r2w,  label="rew")
         if k == 1
             axislegend(ax; position=:lb, framevisible=false)
@@ -216,7 +172,7 @@ function run_demo(; reps=24, seed=20251105)
         )
     end
 
-    plot_scenarios(outs; ncol=4, savepath="scenarios_r2_vs_time.png")
+    plot_scenarios(outs; ncol=4, savepath="JacobianApproach/FinalFigures/scenarios_r2_vs_time.png")
     println("Saved: scenarios_r2_vs_time.png")
 end
 
