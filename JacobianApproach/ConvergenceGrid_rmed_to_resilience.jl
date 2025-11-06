@@ -7,7 +7,7 @@ function _draw_comm(; S=120, conn=0.10, mean_abs=0.10, mag_cv=0.60,
                      u_mean=1.0, u_cv=0.8, seed=42)
     rng = Random.Xoshiro(seed)
     # Prefer niche; fallback to random_trophic if niche not defined
-    A0, R = build_niche_trophic(S; conn, mean_abs, mag_cv, degree_family, deg_param, rho_sym, rng)
+    A0 = build_niche_trophic(S; conn, mean_abs, mag_cv, degree_family, deg_param, rho_sym, rng)
 
     baseIS = realized_IS(A0)
     β = baseIS > 0 ? mean_abs/baseIS : 1.0  # put A on the desired IS scale
@@ -38,6 +38,7 @@ function _variants(A, u; rng, conn, mean_abs, mag_cv, rho_sym, q_thr=0.20, p_rar
                                      mag_cv=mag_cv, rho_sym=rho_sym, rng=rng)
     βr = realized_IS(A_rew0)
     A_rew = (βr > 0 ? (mean_abs / βr) : 1.0) .* A_rew0
+    println("The size of A_rew is $(size(A_rew)) and the size of u is $(size(u))")
     J_rew = jacobian(A_rew, u)
 
     return OrderedDict(
@@ -115,7 +116,7 @@ end
 # Run demo (one community)
 plot_convergence_grid(
     ; S=120, conn=0.3, mean_abs=0.10, mag_cv=0.60,
-    degree_family=:lognormal, deg_param=2.0, rho_sym=0.5,
+    degree_family=:lognormal, deg_param=2.0, rho_sym=1.0,
     u_mean=1.0, u_cv=2.0, seed=42,
     q_thr=0.20, p_rarer=0.10,
     tgrid = 10 .^ range(log10(0.01), log10(100.0); length=30),
