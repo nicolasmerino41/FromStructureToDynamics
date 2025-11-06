@@ -78,20 +78,6 @@ function _metrics(J::AbstractMatrix, u; t_short::Real, t_long::Real)
     )
 end
 
-# --- R^2 to the 1:1 line (for summaries later) -----------------------
-# Returns (r2, slope, intercept) where slope/intercept are from OLS y ~ x
-function r2_to_identity(x::AbstractVector, y::AbstractVector)
-    n = length(x)
-    n == 0 && return (NaN, NaN, NaN)
-    μy = mean(y)
-    sst = sum((y .- μy).^2)
-    ssr = sum((y .- x).^2)
-    r2 = sst == 0 ? 1.0 : 1 - ssr/sst
-    X = [x ones(length(x))]
-    β = X \ y
-    return (r2, β[1], β[2])
-end
-
 # --- Main function ----------------------------------------------------
 """
 run_rho_predictability(opts::RhoOptions) -> (df, summary)
