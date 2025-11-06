@@ -139,7 +139,7 @@ end
 
 function plot_step_grid_by_IS_progressive(df_t::DataFrame;
         # steps::Vector{Symbol} = [:row, :thr, :reshuf, :rew, :ushuf, :rarer],
-        steps::Vector{Symbol} = [:reshuf, :rew, :ushuf,:row],
+        steps::Vector{Symbol} = [:reshuf, :rew, :ushuf],
         cmap = :viridis,
         title::String = "Predictability of r̃med vs t — progressive IS palette")
 
@@ -194,8 +194,10 @@ df_t_B_lowIScv = filter(row -> row.mag_cv == 0.01, df_t_B)
 df_t_B_medIScv = filter(row -> row.mag_cv == 0.75, df_t_B)
 df_t_B_highIScv = filter(row -> row.mag_cv == 1.5, df_t_B)
 
-df_t_shortGoodBio_rhoOne = filter(row -> row.rho_sym == 1.0, df_t_shortGoodBio)
+df_t_rhoOne = filter(row -> row.rho_sym == 1.0, df_t_bio)
 fig = plot_step_grid_by_IS_progressive(
-    df_t_shortGoodBio_rhoOne; cmap=:viridis,
-    title="Predictability of r̃med vs t BIOMASS (rmed weighted), ρ=1.0"
+    df_t_rhoOne; cmap=:viridis,
+    # title="Predictability of r̃med vs t UNIFORM (rmed non-weighted)",
+    # title="Predictability of r̃med vs t BIOMASS (rmed weighted) all rho",
+    title="Predictability of r̃med vs t BIOMASS (rmed weighted) rho=1.0"
 )
