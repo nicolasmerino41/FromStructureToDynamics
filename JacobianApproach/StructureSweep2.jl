@@ -102,9 +102,12 @@ function _run_predictability_continuous(; kind::Symbol, vals::Vector{Float64},
                 error("unknown kind $kind")
             end
 
-            A0 = build_niche_trophic(S; conn=conn, mean_abs=mean_abs,
-                                     mag_cv=mcv, degree_family=:lognormal,
-                                     deg_param=dcv, rho_sym=rho_sym, rng=rng)
+            # A0 = build_niche_trophic(S; conn=conn, mean_abs=mean_abs,
+            #                          mag_cv=mcv, degree_family=:lognormal,
+            #                          deg_param=dcv, rho_sym=rho_sym, rng=rng)
+            A0  = build_random_trophic_ER(
+                S; conn=conn, mean_abs=mean_abs, mag_cv=mcv,
+                rho_sym=rho_sym, rng=rng)
             baseIS = realized_IS(A0)
             baseIS == 0 && continue
             β = IS_target / baseIS
@@ -143,7 +146,7 @@ end
 function plot_r2_vs_time(summary::DataFrame; kind::Symbol, title::String)
     vals = sort(unique(summary.xval))
     @assert length(vals) == 6 "Expected 6 heterogeneity levels for plotting"
-    steps = ["reshuf"]
+    steps = ["row", "ushuf", "reshuf", "rew"]
     cols = Makie.resample_cmap(:viridis, length(steps)+2)[2:end-1]
 
     fig = Figure(size=(1100, 700))
@@ -195,7 +198,7 @@ df_k, summ_k = _run_predictability_continuous(
     mean_abs=0.5,
     reps=60, t_vals=t_vals
 )
-plot_r2_vs_time(summ_k; kind=:deg_cv, title="Predictability vs degree heterogeneity")
+plot_r2_vs_time(summ_k; kind=:deg_cv, title="Predictability vs degree heterogeneity (From random to random)")
 
 # IS heterogeneity
 ish_vals = [0.0,0.1,0.6,1.0,1.5,2.0]
