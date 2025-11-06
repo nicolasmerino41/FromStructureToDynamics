@@ -125,9 +125,9 @@ function summarize_r2(df::DataFrame)
         n < 3 && continue
 
         # short horizon
-        r2s, slope, intercept = r2_to_identity(sub.rmed_full_s, sub.rmed_step_s)
+        r2s = r2_to_identity(sub.rmed_full_s, sub.rmed_step_s)
         # long horizon
-        r2l, slope, intercept = r2_to_identity(sub.rmed_full_l, sub.rmed_step_l)
+        r2l = r2_to_identity(sub.rmed_full_l, sub.rmed_step_l)
 
         push!(rows, (; kind=sub.kind[1], IS=sub.IS[1], q_or_p=sub.q_or_p[1],
                       r2_short=max(r2s,0.0), r2_long=max(r2l,0.0), n))
