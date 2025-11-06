@@ -145,8 +145,8 @@ end
 # ---------- experiment runner ----------------------------------------
 Base.@kwdef struct AntiContOpts
     S::Int = 120; conn::Float64 = 0.10; mean_abs::Float64 = 0.10; mag_cv::Float64 = 0.60
-    degree_family::Symbol = :uniform; deg_param::Float64 = 0.0
-    rho_sym::Float64 = 0.5
+    degree_family::Symbol = :lognormal; deg_param::Float64 = 0.0
+    rho_sym::Float64 = 1.0
     u_mean::Float64 = 1.0; u_cv::Float64 = 0.8
     IS_target::Float64 = 0.10      # fix realized IS of A before making α
     reps::Int = 120
@@ -162,7 +162,7 @@ function run_antisymmetry_continuum(opts::AntiContOpts)
     for r in 1:opts.reps
         rng = Random.Xoshiro(rand(rng_global, UInt64))
         # base trophic A and u
-        A0 = build_random_trophic(opts.S; conn=opts.conn, mean_abs=opts.mean_abs, mag_cv=opts.mag_cv,
+        A0 = build_niche_trophic(opts.S; conn=opts.conn, mean_abs=opts.mean_abs, mag_cv=opts.mag_cv,
                                   degree_family=opts.degree_family, deg_param=opts.deg_param,
                                   rho_sym=opts.rho_sym, rng=rng)
         base_IS = realized_IS(A0)
@@ -213,7 +213,7 @@ function run_antisymmetry_continuum(opts::AntiContOpts)
             sub = df[df.gamma .== γ, :]
             x = sub[!, Symbol(metric_sym, :_full)]
             y = sub[!, Symbol(metric_sym, :_, col_step)]
-            r2, _, _ = r2_to_identity(collect(x), collect(y))
+            r2 = r2_to_identity(collect(x), collect(y))
             push!(out, (; gamma=γ, r2=r2))
         end
         return out
@@ -332,7 +332,7 @@ for manip in keys(summ)
         dfmetric.r2 .= clamp.(dfmetric.r2, 0.0, 1.0)
     end
 end
-plot_r2_vs_gamma(summ; title="Predictability vs antisymmetry preservation γ (initial ρ = 0.5)")
+plot_r2_vs_gamma(summ; title="Predictability vs antisymmetry preservation γ (initial ρ = 1.0)")
 plot_antisymmetry_diagnostics(df)
 
 
