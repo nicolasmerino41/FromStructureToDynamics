@@ -193,9 +193,12 @@ function run_predictability_vs_khetero(opts::KHeteroOptions)
 
         for rep in 1:opts.reps
             rng = Random.Xoshiro(rand(rng0, UInt64))
-            A0 = build_niche_trophic(opts.S; conn=opts.conn, mean_abs=opts.mean_abs, mag_cv=opts.mag_cv,
-                          degree_family=:lognormal, deg_param=dcv,
-                          rho_sym=opts.rho_sym, rng=rng)
+            # A0 = build_niche_trophic(opts.S; conn=opts.conn, mean_abs=opts.mean_abs, mag_cv=opts.mag_cv,
+            #               degree_family=:lognormal, deg_param=dcv,
+            #               rho_sym=opts.rho_sym, rng=rng)
+            A0  = build_random_trophic_ER(
+                opts.S; conn=opts.conn, mean_abs=opts.mean_abs, mag_cv=opts.mag_cv,
+                rho_sym=opts.rho_sym, rng=rng)
             baseIS = realized_IS(A0); baseIS == 0 && continue
             β = opts.IS_target / baseIS
             A = β .* A0
@@ -318,7 +321,7 @@ function plot_predictability_2x2(summary::DataFrame; kind::Symbol, title::String
     @assert "metric" in names(summary) && "step" in names(summary) && "x" in names(summary)
     metrics = ["res","rea","rmed_s","rmed_l"]
     # steps = ["reshuf","thr","row","rew","ushuf","rarer"]  # fixed order
-    steps = ["reshuf"]  # fixed order
+    steps = ["reshuf", "rew", "ushuf"]  # fixed order
     cols = _progressive_colors(length(steps))
 
     fig = Figure(size=(1050, 700))
