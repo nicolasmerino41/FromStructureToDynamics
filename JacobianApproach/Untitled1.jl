@@ -23,7 +23,7 @@ plot_steps_vs_t_with_IS_halo(dt;
 - Plots center line; halo = ribbon between low & high curves.
 """
 function plot_steps_vs_t_with_IS_halo(dt::DataFrame;
-        steps = ["row","thr","reshuf","rew","ushuf","rarer"],
+        steps = ["row","reshuf","rew","ushuf"],
         IS_baseline = 0.5, IS_width_center = 0.05, IS_width_halo = 0.20,
         title = "Predictability of r̃_med vs t (with IS halo)",
         fname = "steps_vs_t_with_IS_halo.png")
@@ -114,13 +114,14 @@ end
 # --- Example usage ---
 # For biomass-weighted:
 plot_steps_vs_t_with_IS_halo(
-    dt_bio; IS_baseline=nothing, IS_width_center=0.05, IS_width_halo=0.20,
+    df_t_bio; IS_baseline=nothing, IS_width_center=0.05, IS_width_halo=0.20,
     title="Biomass pulse: R²(step vs FULL) across t with IS halo",
-    fname="steps_vs_t_with_IS_halo_biomass.png")
+    fname="steps_vs_t_with_IS_halo_biomass.png"
+)
 
 # For uniform pulse:
 plot_steps_vs_t_with_IS_halo(
-    dt_uni; IS_baseline=nothing, IS_width_center=0.05, IS_width_halo=0.20,
+    df_t_uni; IS_baseline=nothing, IS_width_center=0.05, IS_width_halo=0.20,
     title="Uniform pulse: R²(step vs FULL) across t with IS halo",
     fname="steps_vs_t_with_IS_halo_uniform.png"
 )
