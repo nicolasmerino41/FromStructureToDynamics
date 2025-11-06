@@ -3,17 +3,6 @@ using Random, Statistics, LinearAlgebra, DataFrames, Distributions
 using CairoMakie
 using Base.Threads
 
-# ----------------- small utilities -----------------
-# robust R² to the y=x line; also returns OLS slope/intercept (y ~ x)
-function r2_to_identity(x::AbstractVector, y::AbstractVector)
-    n = length(x)
-    n == 0 && return (NaN, NaN, NaN)
-    μy = mean(y); sst = sum((y .- μy).^2); ssr = sum((y .- x).^2)
-    r2 = sst == 0 ? (ssr == 0 ? 1.0 : 0.0) : 1 - ssr/sst
-    β = [x ones(n)] \ y
-    return (max(r2, 0.0), β[1], β[2])
-end
-
 # deterministic per-thread RNG seed
 @inline function _splitmix64(x::UInt64)
     x += 0x9E3779B97F4A7C15
@@ -104,7 +93,7 @@ function run_exhaustive_short_rmed(opts::ExhaustiveOpts)
             rng = Random.Xoshiro(rand(rng0, UInt64))
 
             # build base A, rescale to target IS
-            A0, _ = _build_trophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
+            A0 = build_niche_trophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
                                 degree_family=deg_fam, deg_param=deg_param,
                                 rho_sym=rho_sym, rng=rng)
             baseIS = realized_IS(A0)
@@ -206,7 +195,7 @@ function plot_proof_panels(
             scatter!(ax, x, y; markersize=4, color=:steelblue, alpha=0.35)
             lines!(ax, [mn-pad, mx+pad], [mn-pad, mx+pad]; color=:black, linestyle=:dash)
 
-            r2, slope, intercept = r2_to_identity(x, y)
+            r2= r2_to_identity(x, y)
             txt = @sprintf("R²=%.3f, n=%d", r2, length(x))
             text!(ax, txt; position=(mx+pad, mn-pad), align=(:right,:bottom))
         end
