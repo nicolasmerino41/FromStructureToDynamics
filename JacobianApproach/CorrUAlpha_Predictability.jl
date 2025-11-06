@@ -221,9 +221,8 @@ opts = CorrTimescaleSweepOptions(;
     seed = 20251030
 )
 
-df_raw, df_sum = run_corr_timescale_interaction_sweep(opts)
-plot_corr_timescale_grid_by_IS(df_sum; title="R² of r̃med(t=5.0) vs correlation(u,|α|)")
-
+df_raw_ualpha_corr, df_sum_ualpha_corr = run_corr_timescale_interaction_sweep(opts)
+df_raw_ualpha_corr_rhoOne, df_sum_ualpha_corr_rhoOne = run_corr_timescale_interaction_sweep(opts)
 ################# EXTENSION WITH BASELINE #################
 """
 r2_baselines_long_from_df_main(df_main; steps, filter_fun) -> Dict{String,Float64}
@@ -246,7 +245,7 @@ function r2_baselines_long_from_df_main(df_main::DataFrame;
         col = Symbol(:long_rmed_, s)
         @assert hasproperty(d, col) "df_main is missing column $(col)"
         y = d[!, col]
-        r2, _, _ = _r2_to_identity(collect(x), collect(y))
+        r2 = _r2_to_identity(collect(x), collect(y))
         baselines[s] = r2
     end
     return baselines
@@ -266,7 +265,8 @@ line per panel at the step’s baseline R² (from df_main at t=5.0).
 """
 function plot_corr_timescale_grid_by_IS_with_baseline(summary::DataFrame;
         baselines::Dict{String,Float64},
-        steps::Vector{String} = ["row","thr","reshuf","rew","uni","rarer"],
+        # steps::Vector{String} = ["row","thr","reshuf","rew","uni","rarer"],
+        steps::Vector{String} = ["reshuf","rew","uni"],
         title::String = "Predictability (R²) vs correlation(u, |α|) — with baselines",
         modes::Vector{Symbol} = [:TR],
         cmap = :viridis)
@@ -297,7 +297,9 @@ function plot_corr_timescale_grid_by_IS_with_baseline(summary::DataFrame;
             isempty(d) && continue
             sort!(d, :rho_c)
             x = collect(Float64, d.rho_c)
-            y = collect(Float64, d.r2)
+            r2s = collect(Float64, d.r2)
+            r2s[r2s .< 0.0] .= 0.0
+            y = r2s
             lines!(ax, x, y; color=pal[k], label=labels[k])
             scatter!(ax, x, y; color=pal[k], markersize=5)
         end
@@ -320,16 +322,32 @@ end
 
 # 1) After run_sweep_stable(...; long_time_value=5.0):
 # df_main, df_t = run_sweep_stable(...)
-
 bas = r2_baselines_long_from_df_main(df_main_bio;
-    steps = ["row","thr","reshuf","rew","uni","rarer"],
-    filter_fun = d -> filter(:mode => ==(:TR), d) # optional
+    steps=["row","thr","reshuf","rew","uni","rarer"],
+    filter_fun = d -> filter(:mode => ==("TR"), d)
 )
 
 # 2) After run_corr_timescale_interaction_sweep(...):
-# df_raw, df_sum = run_corr_timescale_interaction_sweep(opts)
-transform!(df_sum, [:rho_c, :r2] => ByRow(Float64) => [:rho_c, :r2])
+# df_raw_ualpha_corr, df_sum = run_corr_timescale_interaction_sweep(opts)
+df_sum_ualpha_corr.rho_c = Float64.(df_sum_ualpha_corr.rho_c)
+df_sum_ualpha_corr.r2    = Float64.(df_sum_ualpha_corr.r2)
 plot_corr_timescale_grid_by_IS_with_baseline(
-    df_sum; baselines=bas,
-    title = "R² vs corr(u,|α|) — baselines at r̃med(t=5)"
+    df_sum_ualpha_corr; baselines=bas,
+    title = "R² vs corr(u,|α|) — baselines at r̃med(t=5) and all rho's"
+)
+
+
+####### ONLY RHO ONE ########
+df_sum_ualpha_corr_rhoOne.rho_c = Float64.(df_sum_ualpha_corr_rhoOne.rho_c)
+df_sum_ualpha_corr_rhoOne.r2    = Float64.(df_sum_ualpha_corr_rhoOne.r2)
+
+bas_rhoOne = r2_baselines_long_from_df_main(filter(:rho_sym => ==(1.0), df_main_bio);
+    # steps=["row","thr","reshuf","rew","uni","rarer"],
+    steps=["reshuf","rew","uni"],
+    filter_fun = d -> filter(:mode => ==("TR"), d)
+)
+
+plot_corr_timescale_grid_by_IS_with_baseline(
+    df_sum_ualpha_corr_rhoOne; baselines=bas_rhoOne,
+    title = "R² vs corr(u,|α|) — baselines at r̃med(t=5) and only rho=1"
 )
