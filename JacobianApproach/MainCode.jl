@@ -2,7 +2,7 @@
 # 1) Helper functions
 ############################
 using Random, Statistics, LinearAlgebra, DataFrames, Distributions, Printf, Serialization, CSV
-using CairoMakie
+using CairoMakie, OrderedCollections
 using Base.Threads
 include("niche_model_builder.jl")
 
@@ -573,17 +573,17 @@ end
       u_weighted_biomass=:biomass
 )
 
-CSV.write("JacobianApproach/Objects/df_main_bio_completeSmallSample.csv", df_main_B)
-CSV.write("JacobianApproach/Objects/df_t_bio_completeSmallSample.csv", df_t_B)
+# CSV.write("JacobianApproach/Objects/df_main_bio_completeSmallSample.csv", df_main_B)
+# CSV.write("JacobianApproach/Objects/df_t_bio_completeSmallSample.csv", df_t_B)
 # CSV.write("Objects/df_main_uni.csv", df_main_uni)
 # CSV.write("Objects/df_t_uni.csv", df_t_uni)
-df_main_bio = CSV.read("JacobianApproach/Objects/df_main_bio.csv", DataFrame)
-df_t_bio = CSV.read("JacobianApproach/Objects/df_t_bio.csv", DataFrame)
-df_main_uni = CSV.read("JacobianApproach/Objects/df_main_uni.csv", DataFrame)
-df_t_uni = CSV.read("JacobianApproach/Objects/df_t_uni.csv", DataFrame)
-df_main_B = CSV.read("JacobianApproach/Objects/df_main_bio_completeSmallSample.csv", DataFrame)
-df_t_B = CSV.read("JacobianApproach/Objects/df_t_bio_completeSmallSample.csv", DataFrame)
-df_t_bio_complete = CSV.read("JacobianApproach/Objects/df_t_bio80000.csv", DataFrame)
+df_main_bio = CSV.read("JacobianApproach/Objects/df_main_bio5000.csv", DataFrame)
+df_t_bio = CSV.read("JacobianApproach/Objects/df_t_bio5000.csv", DataFrame)
+df_main_uni = CSV.read("JacobianApproach/Objects/df_main_uni5000.csv", DataFrame)
+df_t_uni = CSV.read("JacobianApproach/Objects/df_t_uni5000.csv", DataFrame)
+# df_main_B = CSV.read("JacobianApproach/Objects/df_main_bio_completeSmallSample.csv", DataFrame)
+# df_t_B = CSV.read("JacobianApproach/Objects/df_t_bio_completeSmallSample.csv", DataFrame)
+# df_t_bio_complete = CSV.read("JacobianApproach/Objects/df_t_bio80000.csv", DataFrame)
 
 # serialize("JacobianApproach/Objects/df_main_bio.jls", df_main)
 # serialize("JacobianApproach/Objects/df_t_bio.jls", df_t)
