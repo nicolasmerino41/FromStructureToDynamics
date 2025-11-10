@@ -158,9 +158,13 @@ function build_random_trophic_ER(S; conn=0.10, mean_abs=0.10, mag_cv=0.60, rho_s
         if rand(rng) < 0.5
             A[i, j] = -m1
             A[j, i] = +m2  # i predator of j
+            # A[i, j] = rand([1.0, -1.0])*m1
+            # A[j, i] = rand([1.0, -1.0])*m2  # i predator of j
         else
             A[i, j] = +m2
             A[j, i] = -m1  # j predator of i
+            # A[i, j] = rand([1.0, -1.0])*m2
+            # A[j, i] = rand([1.0, -1.0])*m1  # j predator of i
         end
     end
     return A
