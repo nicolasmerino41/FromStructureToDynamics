@@ -13,11 +13,12 @@ predictability loss independent of structure.
 """
 function run_random_to_random_rewiring(; 
         deg_cv_vals = [0.0, 0.25, 0.5, 1.0, 1.5, 2.0],
-        S = 120, conn = 0.10, mean_abs = 0.10, mag_cv = 0.60,
-        rho_sym = 0.5, u_mean = 1.0, u_cv = 0.6,
-        IS_target = 0.2, reps = 50,
+        S = 120, conn = 0.10, mean_abs = 0.5, mag_cv = 0.60,
+        rho_sym = 0.99, u_mean = 1.0, u_cv = 0.6,
+        IS_target = 0.5, reps = 50,
         t_vals = 10 .^ range(-2, 2; length=20),
-        seed = 20251107)
+        seed = 20251107
+)
 
     base = _splitmix64(UInt64(seed))
     bucket = [Vector{NamedTuple}() for _ in 1:nthreads()]
@@ -31,16 +32,34 @@ function run_random_to_random_rewiring(;
             rng = Random.Xoshiro(rand(rng0, UInt64))
 
             # --- Build baseline random ER network
-            A0 = build_random_trophic_ER(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
-                                         rho_sym=rho_sym, rng=rng)
+            A0 = build_random_trophic_ER(
+                S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
+                rho_sym=rho_sym, rng=rng
+            )
+
+            # A0 = build_random_ER(
+            #     S; conn=conn, mean_abs=mean_abs,
+            #     mag_cv=mag_cv, rho_sym=rho_sym,
+            #     rng=rng
+            # )
+
             baseIS = realized_IS(A0)
             baseIS == 0 && continue
             β = IS_target / baseIS
             A0 .*= β
 
             # --- Build new random ER (rewired version)
-            A1 = build_random_trophic_ER(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
-                                         rho_sym=rho_sym, rng=rng)
+            A1 = build_random_trophic_ER(
+                S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
+                rho_sym=rho_sym, rng=rng
+            )
+
+            # A1 = build_random_ER(
+            #     S; conn=conn, mean_abs=mean_abs,
+            #     mag_cv=mag_cv, rho_sym=rho_sym,
+            #     rng=rng
+            # )
+
             β1 = IS_target / realized_IS(A1)
             A1 .*= β1
 
@@ -65,7 +84,7 @@ function run_random_to_random_rewiring(;
     for xv in sort(unique(df.deg_cv)), t in sort(unique(df.t))
         sub = df[(df.deg_cv .== xv) .& (df.t .== t), :]
         isempty(sub) && continue
-        r2 = _r2_to_identity(sub.r_full, sub.r_rew)
+        r2 = r2_to_identity(sub.r_full, sub.r_rew)
         if isnan(r2) || r2 < 0
             r2 = 0.0
         end
@@ -109,5 +128,10 @@ end
 t_vals = 10 .^ range(-2, 5; length=40)
 deg_vals = [0.0, 0.25, 0.5, 1.0, 1.5, 2.0]
 
-df_raw, df_sum = run_random_to_random_rewiring(; deg_cv_vals=deg_vals, t_vals=t_vals, reps=60)
-plot_random_to_random(df_sum)
+df_raw, df_sum = run_random_to_random_rewiring(
+    ; deg_cv_vals=deg_vals, t_vals=t_vals, reps=60,
+    S = 120, conn = 0.10, mean_abs = 0.5, mag_cv = 0.60,
+    rho_sym = 0.0, u_mean = 1.0, u_cv = 0.6,
+    IS_target = 0.5,
+)
+plot_random_to_random(df_sum) 
