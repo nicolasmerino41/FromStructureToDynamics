@@ -29,7 +29,7 @@ function mean_abs_alpha(α)
     return isempty(vals) ? 0.0 : mean(vals)
 end
 
-# scale α_new so that mean |α_new| matches that of α_ref
+# scale α_new so that mean |α_new| matc hes that of α_ref
 function renorm_alpha!(α_new, α_ref)
     m_ref = mean_abs_alpha(α_ref)
     m_new = mean_abs_alpha(α_new)
