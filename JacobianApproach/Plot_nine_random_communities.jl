@@ -1,28 +1,35 @@
-function plot_nine_random_communities(; 
-        S=120, conn=0.10, mean_abs=0.5, mag_cv=0.60,
-        rho_sym=0.5, u_mean=1.0, u_cv=0.6, IS_target=0.5,
-        t_vals=10 .^ range(-2, 2; length=20), seed=1234,
-        absdiff::Bool=true)
-
+function plot_nine_random_communities(
+    ; S=120, conn=0.10, mean_abs=0.5, mag_cv=0.60,
+    rho_sym=0.5, u_mean=1.0, u_cv=0.6, IS_target=0.5,
+    t_vals=10 .^ range(-2, 2; length=20), seed=1234,
+    single_community=true, absdiff::Bool=true
+    )
+    if single_community && !absdiff
+        @warn "SINGLE COMMUNITY CAN ONLY BE PLOTTED WITH ABSDIFF"
+    end
     rng0 = Random.Xoshiro(UInt(seed))
     fig = Figure(size=(1100, 900))
-    Label(fig[0, 1:3], 
-        "Random ER communities — paired convergence toward resilience and difference";
-        fontsize=22, font=:bold, halign=:left)
+    Label(
+        fig[0, 1:3], 
+        "Random ER communities — Convergence toward toward resilience; SINGLE COMMUNITY = $single_community & ABSDIFF = $absdiff";
+        fontsize=15, font=:bold, halign=:left
+    )
 
     ncols, nrows = 3, 3
 
     for k in 1:9
         ri, ci = ((k-1) ÷ ncols) + 1, ((k-1) % ncols) + 1
 
-        ax = Axis(fig[ri, ci];
-                  xscale=log10,
-                  xlabel="time t",
-                  ylabel=(ci == 1 ? "median return rate" : ""),
-                  title="community $k")
+        ax = Axis(
+            fig[ri, ci];
+            xscale=log10,
+            xlabel="time t",
+            ylabel=(ci == 1 ? "median return rate" : ""),
+            title="Community $k"
+        )
 
         rngA = Random.Xoshiro(rand(rng0, UInt))
-        u = random_u(S; mean=u_mean, cv=u_cv, rng= Random.Xoshiro(UInt(seed)))
+        u = random_u(S; mean=u_mean, cv=u_cv, rng=Random.Xoshiro(rand(rng0, UInt)))
 
         # --- single original community
         A0 = build_random_trophic_ER(S; conn=conn, mean_abs=mean_abs, 
@@ -32,9 +39,9 @@ function plot_nine_random_communities(;
         rmed0 = [median_return_rate(J0, u; t=t, perturbation=:biomass) for t in t_vals]
 
         # lines!(ax, t_vals, rmed0; color=:dodgerblue, linewidth=2)
-        # hlines!(ax, resilience0; color=:dodgerblue, linestyle=:dash, linewidth=1.5)
+        hlines!(ax, resilience0; color=:dodgerblue, linestyle=:dash, linewidth=1.5)
 
-        if absdiff
+        if single_community
             # -------------------------------------------------- single pair
             lines!(ax, t_vals, rmed0; color=:dodgerblue, linewidth=2)
             hlines!(ax, resilience0; color=:dodgerblue, linestyle=:dash, linewidth=1.5)
@@ -74,8 +81,14 @@ function plot_nine_random_communities(;
                 lines!(ax, t_vals, rmed0i; color=:dodgerblue, linewidth=1.2)
 
                 # new i
-                A1i = build_random_trophic_ER(S; conn=conn, mean_abs=mean_abs,
-                                              mag_cv=mag_cv, rho_sym=rho_sym, rng=rngB)
+                # A1i = build_random_trophic_ER(
+                #     S; conn=conn, mean_abs=mean_abs,
+                #     mag_cv=mag_cv, rho_sym=rho_sym, rng=rngB
+                # )
+                A1i = build_random_ER(
+                    S; conn=conn, mean_abs=mean_abs,
+                    mag_cv=mag_cv, rho_sym=0.0, rng=rngB
+                )
                 J1i = jacobian(A1i, u)
                 rmed1i = [median_return_rate(J1i, new_u; t=t, perturbation=:biomass) for t in t_vals]
                 all_rmed1[:, i] .= rmed1i
@@ -97,13 +110,16 @@ function plot_nine_random_communities(;
             # secondary axis for R²
             ax2 = Axis(fig[ri, ci],
                        yaxisposition=:right,
-                       ylabel="R²",
+                       ylabel= absdiff ? "|ΔRₘₑd|" : "R²",
                        yticklabelcolor=:red, ylabelcolor=:red,
                        xscale=log10)
             hidespines!(ax2, :l, :t)
             linkxaxes!(ax, ax2)
-            # lines!(ax2, t_vals, r2_vals; color=:red, linewidth=1.8)
-            lines!(ax2, t_vals, absdiff_vals; color=:red, linewidth=1.8)
+            if !absdiff
+                lines!(ax2, t_vals, r2_vals; color=:red, linewidth=1.8)
+            else
+                lines!(ax2, t_vals, absdiff_vals; color=:red, linewidth=1.8)
+            end
         end
     end
 
@@ -112,5 +128,6 @@ end
 
 # ---- run it ----
 t_vals = 10 .^ range(-2, 2; length=20)
-plot_nine_random_communities(; t_vals=t_vals, seed=Int(rand(1:200)), absdiff=true)
-plot_nine_random_communities(; t_vals=t_vals, seed=Int(rand(1:200)), absdiff=false)
+plot_nine_random_communities(; t_vals=t_vals, seed=Int(rand(1:200)), single_community=true, absdiff=true)
+plot_nine_random_communities(; t_vals=t_vals, seed=Int(rand(1:200)), single_community=false, absdiff=true)
+plot_nine_random_communities(; t_vals=t_vals, seed=Int(rand(1:200)), single_community=false, absdiff=false)
