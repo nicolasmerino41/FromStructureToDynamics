@@ -172,3 +172,30 @@ end
 
 # Abundance reshuffle step (replaces uniform_u)
 reshuffle_u(u; rng=Random.default_rng()) = u[randperm(rng, length(u))]
+
+function build_random_ER(
+    S; conn=0.2,
+    mean_abs=0.5, mag_cv=0.5, 
+    rho_sym=0.0, rng=MersenneTwister(42)
+)
+    A = zeros(Float64, S, S)
+    σ2 = log(1 + mag_cv^2)
+    σ  = sqrt(σ2)
+    μ  = log(mean_abs) - σ2/2
+    LN = LogNormal(μ, σ)
+
+    for i in 1:S-1
+        for j in i+1:S
+            if rand(rng) < conn
+                # correlated pair
+                z = randn(rng, 2)
+                z[2] = rho_sym * z[1] + sqrt(1 - rho_sym^2) * z[2]
+                s1 = sign(z[1]); s2 = sign(z[2])
+                m1 = rand(rng, LN); m2 = rand(rng, LN)
+                A[i,j] = s1 * m1
+                A[j,i] = s2 * m2
+            end
+        end
+    end
+    return A
+end
