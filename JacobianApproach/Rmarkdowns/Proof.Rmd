@@ -1,0 +1,355 @@
+---
+title: "Proof"
+author: "Nico, Núria & Jeff"
+date: "2025-11-13"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 5
+  html_document:
+    theme: flatly
+    toc: true
+    toc_depth: 5
+    number_sections: true
+    toc_float:
+      collapsed: false
+    highlight: tango
+  word_document:
+    toc: false
+    toc_depth: '5'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Rmed, rewiring, and where structure matters
+
+This documentatoins lays out the methods and evidence behind our findings about the median return rate \(R_{\mathrm{med}}(t)\), why early and late times are predictable from simple summaries, and why the mid–time window is where network structure does the work.
+
+## What \(R_{\mathrm{med}}(t)\) measures
+
+Consider the linearized dynamics around equilibrium with Jacobian \(J\in\mathbb{R}^{S\times S}\). A small shock with covariance \(C\succeq 0\) evolves as \(e^{tJ}\). We summarize the typical energy of the deviation at time \(t\) by
+$$
+\Phi(t) \,=\, \operatorname{tr}\big(e^{tJ} \, C \, e^{tJ^\top}\big).
+$$
+
+The median return rate is the effective exponential rate at which this typical deviation shrinks between \(0\) and \(t\):
+$$
+R_{\mathrm{med}}(t) \,=\, -\frac{1}{2t}\,\log\frac{\Phi(t)}{\Phi(0)}.
+$$
+
+Two perturbation models:
+
+- Uniform: \(C = I\). Every species is shocked equally.
+
+- Biomass–weighted: \(C = \mathrm{diag}(u^2)\). Larger \(u_i\) implies larger typical shock to species \(i\).
+
+Intuition: \(R_{\mathrm{med}}(t)\) averages decay rates of the dynamical modes, with weights coming from both the perturbation \(C\) and how the modes sit in state space.
+
+### Endpoint anchors (small \(t\) and large \(t\))
+
+A short–time expansion gives
+$$
+R_{\mathrm{med}}(t) \,=\, -\frac{\operatorname{tr}(JC)}{\operatorname{tr}(C)} + \mathcal{O}(t).
+$$
+
+So:
+
+- Uniform: \(R_{\mathrm{med}}(0^+) \approx -\mathrm{mean}(\mathrm{diag}\,J)\).
+
+- Biomass–weighted: \(R_{\mathrm{med}}(0^+) \approx -\sum_i u_i^2 J_{ii} / \sum_i u_i^2\).
+
+At large \(t\), a single slow mode dominates:
+$$
+R_{\mathrm{med}}(t) \to -\max\Re\lambda(J) \quad (t\to\infty).
+$$
+
+These two anchors explain why we can predict \(R_{\mathrm{med}}(t)\) at the extremes with minimal structure–specific detail.
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/Rmed diagnostics trophic ER perturbation Uniform.png"))
+```
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/Rmed diagnostics trophic ER perturbation Biomass.png"))
+```
+
+## How we build the Jacobians
+
+- Draw \(u\) with mean \(u_{\mathrm{mean}}\) and coefficient of variation \(u_{\mathrm{cv}}\).
+
+- Build \(A\) as trophic ER: fixed size \(S\), connectance \(\mathrm{conn}\), mean absolute interaction \(\mathrm{mean\_abs}\), magnitude CV \(\mathrm{mag\_cv}\), and symmetry control \(\rho_{\mathrm{sym}}\).
+
+- Form \(J = -\mathrm{diag}(u) + A\).
+
+## Small–\(t\) and large–\(t\) predictors
+
+- Small–\(t\) predictor.
+  
+  Uniform: \(\widehat{R}_{\mathrm{small}} = -\mathrm{mean}(\mathrm{diag}\,J)\).
+  
+  Biomass: \(\widehat{R}_{\mathrm{small}} = -\sum_i u_i^2 J_{ii} / \sum_i u_i^2\).
+
+- Edge predictor (large–\(t\)).
+  
+  \(\widehat{R}_{\mathrm{edge}} = -\max\Re\lambda(J)\).
+
+In the figures below, we can see how the correlation of \(R_{\mathrm{med}}(t)\) across communities switches from the small–\(t\) predictor to the edge predictor as \(t\) grows. **The crossover marks the mid–time zone.**
+
+### Correlation Uniform
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/CorrelationsPredictorsUniform.png"))
+```
+
+### Correlation Biomass
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/CorrelationsPredictorsBiomass.png"))
+```
+
+## Why the rewire results behave differently whether we maintain TimeScales \(u\) or we redraw them
+
+- Keeping \(u\) the same (or even reshuffling u's) and rewiring \(A\):
+  
+  Early–time values barely move (they depend on the diagonal).
+  
+  Late–time values can diverge (slow mode shifts).
+  
+  \(|\Delta R_{\mathrm{med}}(t)|\) tends to grow with \(t\).
+
+- Redrawing \(u\):
+  
+  Early–time shifts are large (the diagonal changes).
+  
+  Mid–time compresses (many modes contribute, geometry averages).
+  
+  Late–time may rise depending on the slow mode shift.
+  
+  With \(C=I\), late times emphasize the edge; with \(C=\mathrm{diag}(u^2)\), early times are more sensitive to the diagonal and to mode orientation.
+  
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/9Communities_absdiff_sameU_perturbationBiomass.png"))
+```
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/9Communities_absdiff_differentU_perturbationBiomass.png"))
+```
+
+## Proof experiments
+### Full results
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/Bulk Vs Edge Diagnostics Proofs Perturbation Biomass.png"))
+```
+We ran three tests to isolate bulk vs edge vs orientation effects.
+
+### 5a) Fix eigenvalues, shuffle eigenvectors
+
+Take the real Schur form \(J = ZTZ^\top\) (quasi–upper triangular \(T\)). Draw a random orthogonal \(Q\), build
+$$
+\widetilde{J} \,=\, Q T Q^\top .
+$$
+Eigenvalues are preserved; eigenvectors are randomized.
+
+- Expectation: small– and large–\(t\) barely change (anchors fixed), mid–\(t\) compresses because orientations average out.
+
+- Observation: exactly this, especially under biomass weighting where \(C\) couples more to orientations.
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/5A Biomass.png"))
+```
+
+### 5b) Change only the diagonal (new \(u\)), keep \(A\) fixed
+
+Replace \(u\) by a new draw (**a reshuffle does not work!**), keep \(A\) unchanged, so only \(-\mathrm{diag}(u)\) moves.
+
+- Expectation: early \(R_{\mathrm{med}}(t)\) shifts a lot; edge can move a bit; a mid–\(t\) valley appears for \(|\Delta R_{\mathrm{med}}|\).
+
+- Observation: valley present, stronger when perturbations are biomass-weighted.
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/5B Biomass.png"))
+```
+
+### 5c) Reshape the bulk (degree CV, sign and magnitude structure)
+
+Increasing degree heterogeneity, introducing sign/magnitude correlations, or adjusting symmetry moves many eigenvalues (bulk).
+
+- Expectation: mid–time becomes more discriminative, while endpoints remain anchored (**it does not happen! \(|\Delta R_{\mathrm{med}}(t)|\) (pink line) increases kind of monotonically with \(t\)**).
+
+- Observation: \(|\Delta R_{\mathrm{med}}(t)|\) rises at intermediate and large \(t\) while invariant at low \(t\).
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/5C Biomass.png"))
+```
+
+## Explanation for me
+### What does it mean to shuffle the eigenvectors?
+
+Write \(J = V \Lambda V^{-1}\) in the simple diagonalizable case or \(J = ZTZ^\top\) in real Schur form. Each column of \(V\) or \(Z\) gives a direction in state space in which perturbations evolve as a single exponential (or a 2D rotation–decay for a 2×2 block). The perturbation covariance \(C\) assigns weights to these directions.
+
+Shuffling eigenvectors means keeping the decay speeds (eigenvalues) but rotating the preferred directions randomly. The shock energy spreads more evenly across directions, so the mid–time region — where many modes compete — compresses. The endpoints do not rely on those orientations: small \(t\) cares about the diagonal average; large \(t\) cares only about the slowest decay rate.
+
+## Claims I can make "confidently"
+
+- Early time is predicted by the diagonal average; late time by the slowest mode. However, when bulk properties are changed \((5c)\), large-\(t\) is also affected, whereas short-\(t\) never is.   
+  
+  *Exhibit:* endpoint scatter plots and correlation–vs–\(t\) curves.
+
+- At the mid–time window, bulk spectrum and eigenvector geometry matter, hence where structure shows.
+  
+  *Exhibit:* across–community variance vs \(t\) shows a dip; eigenvector shuffling compresses mid–\(t\).
+
+- Rewiring with the same \(u\) yields \(|\Delta R_{\mathrm{med}}(t)|\) rising with \(t\); redrawing \(u\) yields a mid–\(t\) valley.
+  
+  *Exhibit:* rewire panels under same–\(u\) and different–\(u\), under both uniform and biomass perturbations.
+
+## Appendix: tiny derivations
+
+- Small–\(t\) expansion. Using \(e^{tJ} = I + tJ + \mathcal{O}(t^2)\),
+$$
+\Phi(t) = \operatorname{tr}\big( (I + tJ) C (I + tJ^\top)\big) + \mathcal{O}(t^2)
+= \Phi(0) + 2t\,\operatorname{tr}(JC) + \mathcal{O}(t^2).
+$$
+Then \(\log \Phi(t) = \log\Phi(0) + 2t\,\operatorname{tr}(JC)/\Phi(0) + \mathcal{O}(t^2)\), giving the predictor.
+
+- Large–\(t\) limit. With \(J = ZTZ^\top\) (real Schur), \(e^{tJ} = Z e^{tT} Z^\top\). For large \(t\), the block with largest real part dominates, decaying like \(e^{2t\max\Re\lambda}\), hence the limit for \(R_{\mathrm{med}}(t)\).
+
+### Extra plots
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/Bulk Vs Edge Diagnostics Proofs Perturbation Uniform.png"))
+```
+
+\newpage
+
+# Pair-wise rewiring experiments
+
+## What we change and what we keep
+
+We study how predictable the time-dependent median return rate \(R_{\mathrm{med}}(t)\) is under controlled 'rewiring' of interaction matrices. The key idea is to preserve the multiset of pair interaction values while moving those values to different unordered pairs.
+
+- Start from a source matrix \(A\) (ER-like non-trophic, trophic-ER with degree heterogeneity, or niche-structured).
+
+- Build a target matrix, which:
+  
+  1. Collects all unordered pairs \((i,j),\ i<j\) that are occupied in \(A\).
+  
+  2. Stores their paired values \((A_{ij}, A_{ji})\).
+  
+  3. Places those same paired values on a new random set of unordered pairs.
+  
+  This holds fixed the count of occupied pairs and the multiset of pair strengths (with directions), but destroys who is connected to whom.
+
+- Additionally, instead of rewiring within the same topology class, we send the values to a purely random, no-structure ER-like non-trophic target with matched connectance and mean |A|.
+
+- We compare \(R_{\mathrm{med}}(t)\) for the source vs target along axes that matter for predictability:
+  
+  - Degree heterogeneity (\(\mathrm{deg\_cv}\))
+  
+  - Abundance heterogeneity (\(u\_\mathrm{cv}\))
+  
+  - Alignment between \(u\) and row-load of \(|A|\) (our fast alignment control; here we use negative alignment so that abundant species tend to have weaker outgoing load)
+
+  - Magnitude correlations (symmetry-like magnitude correlation in \(A\))
+
+We compute either the mean absolute difference \(\langle |\Delta R_{\mathrm{med}}(t)| \rangle\) or the fit \(R^2\) to the identity line across many random replicates.
+
+## Same-u vs Different-u protocols
+
+- **Same-u:** We use the same abundance vector \(u\) for the source and the target. This isolates the effect of who is connected to whom given fixed species weights.
+
+- **Different-u:** Redraw \(u\) for the target (or reshuffle indices). This injects an additional source of variation that dominates small-\(t\) behavior and often produces the characteristic mid-\(t\) \"valley\" (compression), because small-\(t\) depends mostly on the diagonal/weights, while large-\(t\) is pinned by the spectral edge, leaving an intermediate regime where structural details average out.
+
+## Design of sweeps and lines
+
+We run 3×3 grids over each axis with 50 replicates per panel.
+Lines shown:
+
+- NT (ER→ER): non-trophic ER rewired to non-trophic ER
+
+- TRdeg (tER→tER): trophic ER with lognormal degree heterogeneity, rewired within class
+
+- NI (niche→tER): niche-structured source mapped to trophic ER target
+
+- TR0 (no-struct tER→tER): within trophic class but with uniform degrees (no structure)
+
+- TRdeg→NT and NI→NT: send pair values onto the 'pure random NT' target (to-purerand control)
+
+## Figures 
+**There are two cases per variable of study, one keeping the same \(u\)'s and one using redrawn \(u\)'s.** 
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/RewiringPredictability_degCV_sameU.png"))
+```
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/RewiringPredictability_degCV_differentU.png"))
+```
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/RewiringPredictability_uCV_sameU.png"))
+```
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/RewiringPredictability_uCV_differentU.png"))
+```
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/RewiringPredictability_uACorr_sameU.png"))
+```
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/RewiringPredictability_uACorr_differentU.png"))
+```
+
+### Note on the alignment control
+
+I use a simple greedy-random mix to align \(u\) with the outgoing row-load of \(|A|\). With negative alignment, large \(u_i\) tend to be assigned to smaller out-degree values.
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/RewiringPredictability_mag_sameU.png"))
+```
+
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/Figures/RewiringPredictability_mag_differentU.png"))
+```
+
+
