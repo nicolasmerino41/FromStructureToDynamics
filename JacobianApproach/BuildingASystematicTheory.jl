@@ -185,8 +185,8 @@ t_vals = 10 .^ range(-2, 2; length=40)
 df, preds = build_ensemble(
     ; N=80, S=120, conn=0.10, mean_abs=0.5, mag_cv=0.60,
     rho_sym=1.0, u_mean=1.0, u_cv=0.6,
-    t_vals=t_vals, perturbation=:biomass, seed=42
+    t_vals=t_vals, perturbation=:uniform, seed=42
 )
 
 # 2) Plot the diagnostics
-plot_diagnostics(df, preds, t_vals; title="R̃med diagnostics — trophic ER (perturbation=:biomass)")
+plot_diagnostics(df, preds, t_vals; title="R̃med diagnostics — trophic ER (perturbation=:uniform)")
