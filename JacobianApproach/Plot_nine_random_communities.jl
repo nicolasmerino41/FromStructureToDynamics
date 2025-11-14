@@ -30,13 +30,13 @@ function plot_nine_random_communities(
     if same_u
         Label(
             fig[0, 1:3],
-            "Random ER communities — Convergence toward toward resilience; SINGLE COMMUNITY = $single_community & ABSDIFF = $absdiff, same_u = $same_u";
-            fontsize=15, font=:bold, halign=:left
+            "Random ER communities — Convergence toward toward resilience; SINGLE COMMUNITY = $single_community & ABSDIFF = $absdiff, same_u = $same_u, perturbation_type = $perturbation_type";
+            fontsize=13, font=:bold, halign=:left
         )
     else
         Label(
             fig[0, 1:3],
-            "Random ER communities — Convergence toward toward resilience; SINGLE COMMUNITY = $single_community & ABSDIFF = $absdiff, same_u = $same_u, reshuffled = $reshuffled";
+            "Random ER communities — Convergence toward toward resilience; SINGLE COMMUNITY = $single_community & ABSDIFF = $absdiff, same_u = $same_u, perturbation_type = $perturbation_type";
             fontsize=13, font=:bold, halign=:left
         )
     end
