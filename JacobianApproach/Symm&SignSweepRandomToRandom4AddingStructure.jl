@@ -243,9 +243,11 @@ function run_rewire_axis_grid(; axis::Symbol, levels::AbstractVector, t_vals::Ab
             end
 
             if need_TRdeg
-                A_trdeg = build_random_trophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
-                                               degree_family=:lognormal, deg_param=degcv_lvl,
-                                               rho_sym=magcorr_lvl, rng=rng)
+                # A_trdeg = build_random_trophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
+                #                                degree_family=:lognormal, deg_param=degcv_lvl,
+                #                                rho_sym=magcorr_lvl, rng=rng)
+                A_trdeg = build_ER_degcv(S, conn, mean_abs, mag_cv, 0.0, 1.0, degcv_lvl; rng=rng)       
+
                 is_trd = realized_IS(A_trdeg); is_trd == 0 && continue
                 A_trdeg .*= mean_abs / is_trd
             end
@@ -279,31 +281,52 @@ function run_rewire_axis_grid(; axis::Symbol, levels::AbstractVector, t_vals::Ab
             u_ni    = (need_NI    ? draw_u_for(A_ni)    : nothing)
             u_tr0   = (need_TR0   ? draw_u_for(A_tr0)   : nothing)
 
-            if !same_u
-                u_nt_i = (need_NT    ? draw_u_for(A_nt)    : nothing)
-                u_trdeg_i = (need_TRdeg ? draw_u_for(A_trdeg) : nothing)
-                u_ni_i = (need_NI    ? draw_u_for(A_ni)    : nothing)
-                u_tr0_i = (need_TR0   ? draw_u_for(A_tr0)   : nothing)
-            end
+            u_nt_i = (need_NT    ? draw_u_for(A_nt)    : nothing)
+            u_trdeg_i = (need_TRdeg ? draw_u_for(A_trdeg) : nothing)
+            u_ni_i = (need_NI    ? draw_u_for(A_ni)    : nothing)
+            u_tr0_i = (need_TR0   ? draw_u_for(A_tr0)   : nothing)
 
             # ---- targets (rewire/purerand) for each requested line ----
             # helper to produce (sourceA, targetA, u) for a tag
             function source_target(tag::Symbol)
                 if tag === :NT
-                    R = rewire_pairs_preserving_values(A_nt; rng=rng, random_targets=true)
+                    # NT: independent NT draw as target
+                    R = build_random_nontrophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
+                                               degree_family=:uniform, deg_param=0.0,
+                                               rho_sym=magcorr_lvl, rng=rng)
+                    isR = realized_IS(R); isR == 0 && return (A_nt, R, u_nt, u_nt_i)
+                    R  .*= mean_abs / isR
                     return (A_nt, R, u_nt, u_nt_i)
+
                 elseif tag === :TRdeg
-                    R = rewire_pairs_preserving_values(A_trdeg; rng=rng, random_targets=true)
+                    # TRdeg: independent trophic-ER draw as target (same deg_cv etc.)
+                    R = build_ER_degcv(S, conn, mean_abs, mag_cv, 0.0, 1.0, degcv_lvl; rng=rng)
+                    isR = realized_IS(R); isR == 0 && return (A_trdeg, R, u_trdeg, u_trdeg_i)
+                    R  .*= mean_abs / isR
                     return (A_trdeg, R, u_trdeg, u_trdeg_i)
-                elseif tag === :NI
-                    R = rewire_pairs_preserving_values(A_ni; rng=rng, random_targets=true)
-                    return (A_ni, R, u_ni, u_ni_i)
+
                 elseif tag === :TR0
-                    R = rewire_pairs_preserving_values(A_tr0; rng=rng, random_targets=true)
+                    # TR0: independent uniform-degree trophic ER as target
+                    R = build_random_trophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
+                                             degree_family=:uniform, deg_param=0.0,
+                                             rho_sym=magcorr_lvl, rng=rng)
+                    isR = realized_IS(R); isR == 0 && return (A_tr0, R, u_tr0, u_tr0_i)
+                    R  .*= mean_abs / isR
                     return (A_tr0, R, u_tr0, u_tr0_i)
+
+                elseif tag === :NI
+                    # NI: niche → trophic ER (different families stays different)
+                    R = build_random_trophic(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
+                                             degree_family=:lognormal, deg_param=degcv_lvl,
+                                             rho_sym=magcorr_lvl, rng=rng)
+                    isR = realized_IS(R); isR == 0 && return (A_ni, R, u_ni, u_ni_i)
+                    R  .*= mean_abs / isR
+                    return (A_ni, R, u_ni, u_ni_i)
+
                 elseif tag === :TRdeg_to_NT
                     R = pure_random_NT(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv, rng=rng)
                     return (A_trdeg, R, u_trdeg, u_trdeg_i)
+
                 else # :NI_to_NT
                     R = pure_random_NT(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv, rng=rng)
                     return (A_ni, R, u_ni, u_ni_i)
@@ -334,11 +357,17 @@ function run_rewire_axis_grid(; axis::Symbol, levels::AbstractVector, t_vals::Ab
                     JR = jacobian(R, u_i)
                     spR = schur_pack(JR)
                 end
-                w  = u .^ 2
-                w_i = u_i .^ 2
-
-                f = _rmed_series_schur(spA, w, t_vals)
-                g = _rmed_series_schur(spR, w_i, t_vals)
+                # --- minimal, correct block ---
+                if same_u
+                    w = u .^ 2
+                    f = _rmed_series_schur(spA, w, t_vals)
+                    g = _rmed_series_schur(spR, w, t_vals)   # use the same weights
+                else
+                    w  = u   .^ 2
+                    w_i = u_i.^ 2
+                    f = _rmed_series_schur(spA, w,   t_vals)
+                    g = _rmed_series_schur(spR, w_i, t_vals)
+                end
 
                 as = acc[tag]
                 @inbounds for i in 1:nt
@@ -490,63 +519,65 @@ seed = 250463
 
 # 1) Degree heterogeneity sweep (applies to ER and niche)
 levels_deg = collect(range(0.00, 1.50; length=9))
-@time df_deg = run_rewire_axis_grid(
+@time df_deg_different_u = run_rewire_axis_grid(
     ; axis=:degcv, levels=levels_deg, t_vals=t_vals,
     reps=10, S=S, conn=conn, mean_abs=mean_abs, mag_cv=mag_cv, 
     u_mean=1.0, u_cv=0.6, degcv0=0.0,
-    magcorr_baseline=0.0, seed=seed,
+    magcorr_baseline=1.0, seed=seed,
     same_u=false
 )
+df_deg_different_u = df_deg
 # Rmed
-plot_rewire_axis_grid(df_deg, :degcv; title="Rewiring predictability Degree CV (|ΔR̃med|) Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
-plot_rewire_axis_grid(df_deg, :degcv; title="Rewiring predictability Degree CV (|ΔR̃med|) Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
+plot_rewire_axis_grid(df_deg_different_u, :degcv; title="Rewiring predictability Degree CV (|ΔR̃med|) Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
+plot_rewire_axis_grid(df_deg_same_u, :degcv; title="Rewiring predictability Degree CV (|ΔR̃med|) Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
 # R2
-plot_rewire_axis_grid(df_deg, :degcv; title="Rewiring predictability Degree CV (R²) Different u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
-plot_rewire_axis_grid(df_deg, :degcv; title="Rewiring predictability Degree CV (R²) Different u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
+plot_rewire_axis_grid(df_deg_different_u, :degcv; title="Rewiring predictability Degree CV (R²) Different u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
+plot_rewire_axis_grid(df_deg_same_u, :degcv; title="Rewiring predictability Degree CV (R²) Same u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
 
 # 2) u_cv sweep
 levels_u = collect(range(0.1, 2.0; length=9))
-df_u = run_rewire_axis_grid(
+df_u_different_u = run_rewire_axis_grid(
     ; axis=:u_cv, levels=levels_u, t_vals=t_vals,
     reps=10, S=S, conn=conn, mean_abs=mean_abs, mag_cv=mag_cv,
     u_mean=1.0, u_cv=0.6, magcorr_baseline=0.0, seed=seed,
     same_u=false
 )
+df_u_different_u = df_u
 # Rmed
-plot_rewire_axis_grid(df_u, :u_cv; title="Rewiring predictability u CV (|ΔR̃med|) Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
-plot_rewire_axis_grid(df_u, :u_cv; title="Rewiring predictability u CV (|ΔR̃med|) Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
+plot_rewire_axis_grid(df_u_different_u, :u_cv; title="Rewiring predictability u CV (|ΔR̃med|) Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
+plot_rewire_axis_grid(df_u_same_u, :u_cv; title="Rewiring predictability u CV (|ΔR̃med|) Same u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
 # R2
-plot_rewire_axis_grid(df_u, :u_cv; title="Rewiring predictability u CV (R²) Different u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
-plot_rewire_axis_grid(df_u, :u_cv; title="Rewiring predictability u CV (R²) Different u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
+plot_rewire_axis_grid(df_u_different_u, :u_cv; title="Rewiring predictability u CV (R²) Different u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
+plot_rewire_axis_grid(df_u_same_u, :u_cv; title="Rewiring predictability u CV (R²) Same u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
 
 # 3) u–A correlation sweep (0..1 alignment of u to |A| row-load)
 levels_align = collect(range(0.0, 1.0; length=9))
-df_align = run_rewire_axis_grid(
+df_align_different_u = run_rewire_axis_grid(
     ; axis=:uA_corr, levels=levels_align, t_vals,
     reps=10, S, conn, mean_abs, mag_cv, u_mean=1.0, u_cv=0.6,
     magcorr_baseline=0.0, seed,
     same_u=false
 )
 # Rmed
-plot_rewire_axis_grid(df_align, :uA_corr; title="Rewiring predictability u-A corr (|ΔR̃med|) Negative Corr Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
-plot_rewire_axis_grid(df_align, :uA_corr; title="Rewiring predictability u-A corr (|ΔR̃med|) Negative Corr Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
+plot_rewire_axis_grid(df_align_different_u, :uA_corr; title="Rewiring predictability u-A corr (|ΔR̃med|) Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
+plot_rewire_axis_grid(df_align_same_u, :uA_corr; title="Rewiring predictability u-A corr (|ΔR̃med|) Negative Corr Same u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
 # r2
-plot_rewire_axis_grid(df_align, :uA_corr; title="Rewiring predictability u-A corr (R²) Negative Corr Different u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
-plot_rewire_axis_grid(df_align, :uA_corr; title="Rewiring predictability u-A corr (R²) Negative Corr Different u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
+plot_rewire_axis_grid(df_align_different_u, :uA_corr; title="Rewiring predictability u-A corr (R²) Different u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
+plot_rewire_axis_grid(df_align_same_u, :uA_corr; title="Rewiring predictability u-A corr (R²) Negative Corr Same u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
 
 # 4) Magnitude correlation sweep (baseline elsewhere is 0.0)
 levels_mag = collect(range(0.0, 1.0; length=9))
-df_mag = run_rewire_axis_grid(
+df_mag_different_u = run_rewire_axis_grid(
     ; axis=:magcorr, levels=levels_mag, t_vals,
     reps=10, S, conn, mean_abs, mag_cv, u_mean=1.0, u_cv=0.6,
     magcorr_baseline=0.0, seed,
     same_u=false
 )
 # Rmed
-plot_rewire_axis_grid(df_mag, :magcorr; title="Rewiring predictability mag corr (|ΔR̃med|) Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
+plot_rewire_axis_grid(df_mag_different_u, :magcorr; title="Rewiring predictability mag corr (|ΔR̃med|) Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
 plot_rewire_axis_grid(df_mag, :magcorr; title="Rewiring predictability mag corr (|ΔR̃med|) Different u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
 # R2
-plot_rewire_axis_grid(df_mag, :magcorr; title="Rewiring predictability mag corr (R²) Different u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
+plot_rewire_axis_grid(df_mag_different_u, :magcorr; title="Rewiring predictability mag corr (R²) Different u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
 plot_rewire_axis_grid(df_mag, :magcorr; title="Rewiring predictability mag corr (R²) Different u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
 
 
