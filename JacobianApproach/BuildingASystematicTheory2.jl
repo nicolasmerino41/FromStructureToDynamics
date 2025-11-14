@@ -64,6 +64,9 @@ function make_baseline(; S, conn, mean_abs, mag_cv, rho_sym, u_mean, u_cv, seed)
     rng = Random.Xoshiro(seed)
     A0 = build_random_trophic_ER(S; conn=conn, mean_abs=mean_abs,
                                  mag_cv=mag_cv, rho_sym=rho_sym, rng=rng)
+    # A0 = build_random_nontrophic(S; conn=conn, mean_abs=mean_abs,
+    #                              mag_cv=mag_cv, rho_sym=rho_sym, rng=rng,
+    #                              degree_family=:uniform, deg_param=0.0)                             
     scale_IS!(A0; mean_abs=mean_abs)
     u0 = random_u(S; mean=u_mean, cv=u_cv, rng=rng)
     J0 = jacobian(A0, u0)
@@ -112,9 +115,9 @@ function plot_three_tests(res)
     Label(fig[0, 1:3], "Bulk vs edge diagnostics — proofs (perturbation=$(perturbation))";
           fontsize=22, font=:bold)
 
-    labels = ["(5a) eigenvector scramble (eigs fixed)",
-              "(5b) diagonal only (A fixed, new u)",
-              "bulk reshape (↑deg_cv, Δρ_sym)"]
+    labels = ["(5a) eigenvector shuffle (eigs fixed)",
+              "(5b) reshuffle diagonal only (A fixed, new u)",
+              "(5c) bulk reshape (↑deg_cv, Δρ_sym)"]
     others = [fscr, fdiag, fbulk]
     Js     = [Jscr, Jdiag, Jbulk]
 
@@ -128,7 +131,9 @@ function plot_three_tests(res)
 
         # |ΔR̃med|
         ax2 = Axis(fig[2, j]; xscale=log10, ylabel=(j==1 ? "|ΔR̃med|" : ""), xlabel="t")
-        lines!(ax2, t_vals, absdiff(f0, others[j]); color=:crimson, linewidth=2)
+        values = abs.(f0 .- others[j])
+        values[values .< 1e-3] .= 0.0
+        lines!(ax2, t_vals, values; color=:crimson, linewidth=2)
 
         # eigenvalue real parts
         ax3 = Axis(fig[3, j]; ylabel=(j==1 ? "Re(λ)" : ""), xlabel="mode index")
