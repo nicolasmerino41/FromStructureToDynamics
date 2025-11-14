@@ -415,7 +415,6 @@ df_align, df_summary = run_alignment_battery(; makeA, makeu,
 println(first(df_align, 6))
 println(df_summary)
 
-
 df_r2_res, df_spec = resilience_R2_panel(; makeA, makeu, reps=96, rho_sym=0.5, mag_cv=0.60, seed=20251111)
 println(df_r2_res)
 
