@@ -59,55 +59,102 @@ function run_axis_grid(; axis::Symbol, levels::AbstractVector, reps::Int=50,
                        IS_target::Float64=0.5, seed::Int=20251110)
 
     base = UInt(seed)
-    nthreads_used = nthreads()
+    nthreads_used = Threads.nthreads()
     buckets = [NamedTuple[] for _ in 1:nthreads_used]
-
     combos = 1:length(levels)
 
     @threads for idx in combos
         tid = threadid()
         local_rows = buckets[tid]
 
-        lvl_sign = (axis == :sign || axis == :both) ? levels[idx] : 0.0
+        lvl_sign  = (axis == :sign  || axis == :both) ? levels[idx] : 1.0
         lvl_degcv = (axis == :degcv || axis == :both) ? levels[idx] : 0.0
 
         rng_iter = Random.Xoshiro(base ⊻ UInt(idx*7919) ⊻ UInt(tid*4099))
 
-        for t in t_vals
-            r_full = Float64[]; r_rew = Float64[]
-            for rep in 1:reps
-                rng = Random.Xoshiro(rand(rng_iter, UInt))
+        nt  = length(t_vals)
+        n   = zeros(Int,      nt)
+        sx  = zeros(Float64,  nt)
+        sy  = zeros(Float64,  nt)
+        sxx = zeros(Float64,  nt)
+        syy = zeros(Float64,  nt)
+        sxy = zeros(Float64,  nt)
+        sad = zeros(Float64,  nt)
 
-                A0 = build_ER_degcv(S, conn, mean_abs, mag_cv, 0.0, lvl_sign, lvl_degcv; rng=rng)
-                A1 = build_ER_degcv(S, conn, mean_abs, mag_cv, 0.0, lvl_sign, 0.0; rng=rng)
+        # tiny closure to compute the full R̃med series using a cached Schur
+        series_from_Ju = let tvals = t_vals
+            function (J::AbstractMatrix{<:Real}, u::AbstractVector{<:Real})
+                F = schur(Matrix{Float64}(J))           # J = Z*T*Z'
+                Z, T = F.Z, F.T
+                w = u .^ 2
+                s = sqrt.(w)
+                logW = log(sum(w))
+                out = Vector{Float64}(undef, length(tvals))
+                @inbounds for (k,t) in pairs(tvals)
+                    Et = exp(t .* T)                     # uses real Schur blocks
+                    E  = Z * Et * Z'
+                    # weight rows by sqrt(w)
+                    @views E .= E .* reshape(s, 1, :)
+                    out[k] = -(log(tr(E*E')) - logW) / (2t)
+                end
+                out
+            end
+        end
 
-                is0 = realized_IS(A0); is1 = realized_IS(A1)
-                (is0 == 0 || is1 == 0) && continue
-                A0 .*= IS_target / is0
-                A1 .*= IS_target / is1
+        for rep in 1:reps
+            rng = Random.Xoshiro(rand(rng_iter, UInt))
 
-                u = random_u(S; mean=u_mean, cv=u_cv, rng=rng)
+            # draw two independent TRdeg communities (same knobs) and scale to IS_target
+            A0 = build_ER_degcv(S, conn, mean_abs, mag_cv, 0.0, lvl_sign, lvl_degcv; rng=rng)
+            A1 = build_ER_degcv(S, conn, mean_abs, mag_cv, 0.0, lvl_sign, lvl_degcv; rng=rng)
 
-                r0 = median_return_rate(jacobian(A0, u), u; t=t, perturbation=:biomass)
-                r1 = median_return_rate(jacobian(A1, u), u; t=t, perturbation=:biomass)
+            is0 = realized_IS(A0); is1 = realized_IS(A1)
+            (is0 == 0 || is1 == 0) && continue
+            A0 .*= IS_target / is0
+            A1 .*= IS_target / is1
 
-                if isfinite(r0) && isfinite(r1)
-                    push!(r_full, r0)
-                    push!(r_rew, r1)
+            u = random_u(S; mean=u_mean, cv=u_cv, rng=rng)
+
+            J0 = jacobian(A0, u)
+            J1 = jacobian(A1, u)
+
+            f = series_from_Ju(J0, u)   # length nt
+            g = series_from_Ju(J1, u)
+
+            @inbounds for k in 1:nt
+                x = f[k]; y = g[k]
+                if isfinite(x) && isfinite(y)
+                    n[k]   += 1
+                    sx[k]  += x
+                    sy[k]  += y
+                    sxx[k] += x*x
+                    syy[k] += y*y
+                    sxy[k] += x*y
+                    sad[k] += abs(y - x)
                 end
             end
-
-            r2 = r2_to_identity(r_full, r_rew)
-            if !isfinite(r2) || r2 < 0; r2 = 0.0; end
-
-            absdiff = mean(abs.(r_full .- r_rew))
-            # println("The difference is ", abs.(r_full .- r_rew))
-            push!(local_rows, (; axis, case=idx, deg_cv=lvl_degcv, rho_sign=lvl_sign, t, r2, absdiff))
         end
+
+        epsd = 1e-12
+        for k in 1:nt
+            t = t_vals[k]
+            if n[k] == 0
+                push!(local_rows, (; axis, case=idx, deg_cv=lvl_degcv, rho_sign=lvl_sign,
+                                   t, r2=0.0, absdiff=NaN))
+                continue
+            end
+            ybar = sy[k] / n[k]
+            sse  = syy[k] + sxx[k] - 2*sxy[k]                 # ∑(y-x)^2
+            sst  = max(syy[k] - n[k]*ybar*ybar, epsd)         # ∑(y-ȳ)^2
+            r2   = max(0.0, 1.0 - sse/sst)
+            ad   = sad[k] / n[k]
+            push!(local_rows, (; axis, case=idx, deg_cv=lvl_degcv, rho_sign=lvl_sign, t, r2, absdiff=ad))
+        end
+
         buckets[tid] = local_rows
     end
 
-    return DataFrame(vcat(buckets...))
+    DataFrame(vcat(buckets...))
 end
 
 function plot_axis_grid(df::DataFrame, axis::Symbol; title::String, absdiff::Bool=false)
@@ -177,11 +224,11 @@ df_both  = run_axis_grid(; axis=:both,  levels=levels_sig, reps=50, t_vals=t_val
                          mean_abs=mean_abs, mag_cv=mag_cv, u_mean=u_mean, u_cv=u_cv,
                          IS_target=IS_target, seed=seed)
 
-fig_deg  = plot_axis_grid(df_degcv, :degcv; title="Grid 1 — Degree heterogeneity only (|ΔRmed|)", absdiff=true)
-fig_deg  = plot_axis_grid(df_degcv, :degcv; title="Grid 1 — Degree heterogeneity only (R²)", absdiff=false)
+fig_deg  = plot_axis_grid(df_degcv, :degcv; title="Grid 1 — Degree heterogeneity only (|ΔRmed|) Recycling pairs", absdiff=true)
+fig_deg  = plot_axis_grid(df_degcv, :degcv; title="Grid 1 — Degree heterogeneity only (R²) Recycling pairs", absdiff=false)
 
-fig_sign = plot_axis_grid(df_sign,  :sign;  title="Grid 2 — Sign antisymmetry only (|ΔRmed|)", absdiff=true)
-fig_sign = plot_axis_grid(df_sign,  :sign;  title="Grid 2 — Sign antisymmetry only (R²)", absdiff=false)
+fig_sign = plot_axis_grid(df_sign,  :sign;  title="Grid 2 — Sign antisymmetry only (|ΔRmed|) Recycling pairs", absdiff=true)
+fig_sign = plot_axis_grid(df_sign,  :sign;  title="Grid 2 — Sign antisymmetry only (R²) Recycling pairs", absdiff=false)
 
-fig_both = plot_axis_grid(df_both,  :both;  title="Grid 3 — Degree + Sign combined (|ΔRmed|)", absdiff=true)
-fig_both = plot_axis_grid(df_both,  :both;  title="Grid 3 — Degree + Sign combined (R²)", absdiff=false)
+fig_both = plot_axis_grid(df_both,  :both;  title="Grid 3 — Degree + Sign combined (|ΔRmed|) Recycling pairs", absdiff=true)
+fig_both = plot_axis_grid(df_both,  :both;  title="Grid 3 — Degree + Sign combined (R²) Recycling pairs", absdiff=false)
