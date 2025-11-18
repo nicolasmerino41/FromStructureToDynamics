@@ -190,9 +190,26 @@ function run_bulk_vs_baseline(; S::Int=120, conn::Float64=0.10, mean_abs::Float6
 
         # --- structured case: trophic-ER
         A  = build_trophic_ER(S; conn=conn, mean_abs=mean_abs, mag_cv=mag_cv, deg_cv=deg_cv, rng=rng)
-        J  = jacobian(A, u)
-        Jp = bulk_scramble_lock_edge(J; freeze_k=freeze_k, rng=rng)   # edge locked, bulk scrambled
-        
+        # OLD VERSION
+        # J  = jacobian(A, u)
+        # Jp = bulk_scramble_lock_edge(J; freeze_k=freeze_k, rng=rng)   # edge locked, bulk scrambled
+
+        # NEW VERSION
+        J   = jacobian(A, u)
+
+        #If you want to pin small-t
+        # Js  = bulk_scramble_lock_edge(J; freeze_k=freeze_k, rng=rng)
+        # Jp, info = structure_only_project(J, Js; mode=:pin_small_t)
+
+        # #If you want to pin large-t
+        Js  = bulk_scramble_lock_edge(J; freeze_k=freeze_k, rng=rng)
+        Jp, info = structure_only_project(J, Js; mode=:pin_large_t)
+
+        chk = sanity_check_series(J, Jp, u, t_vals; perturb=perturb)
+        @info "projection" info chk_small=chk.Δ_small chk_large=chk.Δ_large
+        # In :pin_small_t expect chk_small ≈ 0 and chk_large > 0
+        # In :pin_large_t expect chk_large ≈ 0 and chk_small > 0
+
         n_attempts_struct += 1
         λ0 = maximum(real(eigvals(J)))
         λb = maximum(real(eigvals(Jp)))
@@ -268,11 +285,15 @@ function run_bulk_vs_baseline(; S::Int=120, conn::Float64=0.10, mean_abs::Float6
         b0 = compute_rmed_series_stable(J0, u, t_vals; perturb=perturb)
         b1 = compute_rmed_series_stable(J1, u, t_vals; perturb=perturb)
 
-        # after computing b0,b1:
         if any(!isfinite, b0) || any(!isfinite, b1)
             @info "Skip rep (baseline) due to non-finite series"
             continue
         end
+
+        # >>> ADD THESE TWO LINES <<<
+        sum_base0 .+= b0
+        sum_base1 .+= b1
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         B .+= abs.(b1 .- b0); nB += 1
     end
@@ -287,8 +308,8 @@ function run_bulk_vs_baseline(; S::Int=120, conn::Float64=0.10, mean_abs::Float6
     # NEW: finalize mean series (NaN if none accepted)
     mean_struct = (nS > 0 ? sum_struct ./ nS : fill(NaN, nt))
     mean_scram  = (nS > 0 ? sum_scram  ./ nS : fill(NaN, nt))
-    mean_b0     = (nB > 0 ? sum_base0 ./ nB : fill(NaN, nt))
-    mean_b1     = (nB > 0 ? sum_base1 ./ nB : fill(NaN, nt))
+    mean_b0 = (nB > 0 ? sum_base0 ./ nB : fill(NaN, nt))
+    mean_b1 = (nB > 0 ? sum_base1 ./ nB : fill(NaN, nt))
 
     return (
         ; t=t_vals,
@@ -324,15 +345,12 @@ res = run_bulk_vs_baseline(; S, conn, mean_abs, mag_cv,
 # res.excess is the non-trivial mid-t signal (structured minus baseline ER→ER)
 # You can also inspect res.baseline (gray band), res.delta_struct, and diagnostics.
 
-ann = annex_u_cv_sweep(; u_cvs=0.2:0.3:2.0, S=120, conn=0.10, mean_abs=0.50, mag_cv=0.60,
-                       deg_cv=0.9, u_mean=1.0, t_vals=t_vals, reps=30, seed=Int64(0xBEEF),
-                       perturb=:biomass, freeze_k=1)
+# ann = annex_u_cv_sweep(; u_cvs=0.2:0.3:2.0, S=120, conn=0.10, mean_abs=0.50, mag_cv=0.60,
+#                        deg_cv=0.9, u_mean=1.0, t_vals=t_vals, reps=30, seed=Int64(0xBEEF),
+#                        perturb=:biomass, freeze_k=1)
 
 # For each u_cv, plot ann[u_cv].excess and track how long-t sensitivity (|Δresilience|)
 # and mid-t excess change with u_cv.
-
-using CairoMakie
-
 function plot_bulk_vs_baseline(res; title="Bulk vs baseline")
     fig = Figure(size=(1100, 700))
     # 1) Δ_struct and baseline
