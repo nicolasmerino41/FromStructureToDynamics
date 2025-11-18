@@ -131,8 +131,8 @@ function plot_three_tests(res)
 
         # |ΔR̃med|
         ax2 = Axis(fig[2, j]; xscale=log10, ylabel=(j==1 ? "|ΔR̃med|" : ""), xlabel="t")
-        values = abs.(f0 .- others[j])
-        values[values .< 1e-3] .= 0.0
+        values = f0 .- others[j]
+        # values[values .< 1e-3] .= 0.0
         lines!(ax2, t_vals, values; color=:crimson, linewidth=2)
 
         # eigenvalue real parts
