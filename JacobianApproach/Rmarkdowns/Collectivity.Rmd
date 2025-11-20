@@ -1,0 +1,208 @@
+---
+title: "Collectivity"
+author: "Nico, Núria & Jeff"
+date: "2025-11-20"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 5
+  html_document:
+    theme: flatly
+    toc: true
+    toc_depth: 5
+    number_sections: true
+    toc_float:
+      collapsed: false
+    highlight: tango
+  word_document:
+    toc: false
+    toc_depth: '5'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# From rewiring to collectivity: a practical guide
+
+We want to separate two distinct ways rewiring changes dynamics:
+
+- it can change the *collective scale* of biotic interactions (the spectral radius of the interaction matrix);
+
+- it can change the *shape* of interactions (how that strength is distributed across modes and pathways), which is especially relevant in non-normal systems.
+
+Our aim is to build a pipeline that detects, visualises, and interprets the respective contributions to predictability loss across time.
+
+## Model and notation
+
+We work with a Generalised Lotka–Volterra (GLV) linearisation around a feasible equilibrium. Write the Jacobian as
+\[
+J \;=\; D \;+\; A,
+\]
+where \(D = -\mathrm{diag}(\tau_1^{-1},\ldots,\tau_S^{-1})\) encodes time scales and \(A\) is the interaction matrix with zero diagonal.
+
+It is often convenient to factor out the overall *collective scale* \(\sigma\) of \(A\) and a unit-radius shape \(\widehat A\):
+\[
+A \;=\; \sigma \,\widehat A, 
+\qquad \rho(\widehat A)=1,
+\qquad J(\sigma,\widehat A) \;=\; D + \sigma \widehat A,
+\]
+where \(\rho(\cdot)\) denotes the spectral radius. We will call \(\sigma=\rho(A)\) the *collectivity*.
+
+### Time-resolved recoverability
+
+For a chosen perturbation ensemble (e.g., biomass-weighted), define the time-dependent effective return rate \( \widetilde R_{\mathrm{med}}(t) \). As \(t\to\infty\), \( \widetilde R_{\mathrm{med}}(t)\to -\max \Re \lambda(J) \) (the asymptotic resilience). Small-\(t\) is controlled by \(D\) (time scales), while intermediate \(t\) is where non-normal structure can dominate.
+
+## Why collectivity matters
+
+The Neumann series of indirect effects \( (I-A)^{-1} = I + A + A^2 + \dots \) converges when \(\rho(A) < 1\). Larger \(\rho(A)\) implies stronger amplification of indirect paths. For normal matrices,
+\[
+\rho(A) \;\le\; \|A\|_2 \;\le\; \|A\|_F,
+\]
+and there is a tight lower link to May’s complexity \(C = \|A\|_F/\sqrt{S}\). For non-normal matrices the lower bound fails: triangular or highly directional structures can have \(\rho(A)\) much smaller than \(\|A\|_F\), while anti-symmetric or strongly aligned structures can push \(\rho(A)\) upwards. This gap between \(\rho(A)\) and summary norms is exactly where *structure* (beyond mere magnitude) lives.
+
+## Two kinds of change under rewiring
+
+Consider a rewiring \(A \to A'\) with \(D\) fixed.
+
+1. **Collectivity drift.** The spectral radius changes by \(\Delta \sigma = \rho(A') - \rho(A)\). This alters the net size of the space of indirect pathways.
+
+2. **Shape change.** Even after we rescale to match collectivity,
+\[
+\widetilde A' \;=\; \frac{\rho(A)}{\rho(A')} A', \qquad \rho(\widetilde A')=\rho(A),
+\]
+the alignment of \(\widehat A'\) with \(D\), and its non-normal geometry, can change transient behaviour and mid-\(t\) recoverability.
+
+Our goal is to measure both contributions separately and ask when mid-\(t\) peaks persist after collectivity is matched.
+
+## Decomposing the effect on \( \widetilde R_{\mathrm{med}}(t) \)
+
+Given \(J = D + A\) and \(J' = D + A'\):
+
+- **Raw change**
+\[
+\Delta R_{\mathrm{raw}}(t) \;=\; \widetilde R_{\mathrm{med}}(J',t) - \widetilde R_{\mathrm{med}}(J,t).
+\]
+
+- **Collectivity-matched change**
+\[
+\Delta R_{\mathrm{shape}}(t) \;=\; \widetilde R_{\mathrm{med}}(D + \widetilde A',t) - \widetilde R_{\mathrm{med}}(J,t).
+\]
+
+- **Implied collectivity contribution**
+\[
+\Delta R_\sigma(t) \;=\; \Delta R_{\mathrm{raw}}(t) - \Delta R_{\mathrm{shape}}(t).
+\]
+
+If \(\Delta R_{\mathrm{shape}}(t)\) shows a mid-\(t\) hump even after \(\rho\) is matched, the signal is genuinely structural (non-normal geometry, misalignment with time scales). If the hump disappears, the earlier peak was mostly collectivity drift.
+
+## Non-normality and why mid-\(t\) is special
+
+When \(J\) is non-normal, eigenvectors are non-orthogonal, and the Schur basis can carry strong feedforward/feedback couplings. Consequences:
+
+- Small \(t\): dominated by \(D\) (sum of individual time scales). Matching \(D\) pins this regime.
+
+- Large \(t\): driven by \(-\max \Re \lambda(J)\). If a manipulation pins the edge mode, large-\(t\) differences collapse.
+
+- Intermediate \(t\): sensitive to eigenvector geometry and to \([D,A]\neq 0\). That is where non-normal transient amplification and mode mixing create the “mid-\(t\) gap”.
+
+Useful diagnostics to track alongside curves:
+
+- Non-normality of \(J\): \(\|J^\top J - JJ^\top\|_F\).
+
+- Misalignment with time scales: \(\|[D,A]\|_F\).
+
+- Schur basis conditioning \(\kappa(Z)\) (overlap of invariant subspaces).
+
+- Participation ratios (how concentrated eigenvectors are).
+
+- Collectivity vs norms: \(\rho(A)\), \(\|A\|_F\), ratios \(\rho/\|A\|_F\) and \(\rho / C\).
+
+## Recovery window and the \(2t\,\widetilde R_{\mathrm{med}}(t) \approx -\log P\) heuristic
+
+Define the recovery fraction \(P\in(0,1)\) as the target level of remaining perturbation energy in the chosen ensemble. Exact evaluation involves \(\operatorname{tr}\!\big(e^{tJ} C e^{tJ^\top}\big)\) (with perturbation covariance \(C\)).
+
+A convenient *scalar* proxy comes from treating \(\widetilde R_{\mathrm{med}}(\cdot)\) as roughly constant on \([0,t]\):
+\[
+2t\,\widetilde R_{\mathrm{med}}(t) \;\approx\; -\log P.
+\]
+This is accurate when \( \widetilde R_{\mathrm{med}}(s)\) is flat on \([0,t]\) (weak non-normal transients). It **overestimates** the recovery time if there is early transient amplification (mid-\(t\) hump), and becomes **asymptotically exact** as \(t\to\infty\).
+
+### What to visualise in a separate check
+
+For representative ER, trophic, and niche cases:
+
+- Plot the **exact** \(t_P\) from the criterion on \( \operatorname{tr}(e^{tJ} C e^{tJ^\top}) \).
+
+- Plot the **proxy** \(t_P^{\mathrm{flat}}\) from \( 2t\,\widetilde R_{\mathrm{med}}(t) = -\log P \).
+
+- Show their ratio vs \(P\) and relate the discrepancy to non-normality diagnostics.
+
+## The experiment we will run
+
+We compare three manipulations of \(A\) while keeping \(D\) fixed:
+
+1. **Raw rewire** \(A\to A'\) (e.g., degree-preserving pair swaps, or spectrum-preserving eigenvector shuffle).
+
+2. **\(\rho\)-matched rewire** \(A' \mapsto \widetilde A' = \frac{\rho(A)}{\rho(A')}A'\).
+
+3. **A-space spectrum-preserving shuffle** (scramble eigenvectors of \(A\) while preserving its full spectrum), used as a control that isolates eigenvector geometry.
+
+For each case we compute \( \Delta R_{\mathrm{raw}}, \Delta R_{\mathrm{shape}}, \Delta R_\sigma \) across \(t\), and aggregate across replicates.
+
+### Structure gradient
+
+We repeat along a discrete path:
+
+- ER (no degree heterogeneity, zero sign/magnitude correlation)
+
+- degree-heterogeneous ER
+
+- add magnitude correlation
+
+- trophic signs
+
+- niche model
+
+This spans from “random” to “structured”. We expect:
+
+- In ER-like systems, after \(\rho\) matching, \( \Delta R_{\mathrm{shape}}(t)\) is small and mostly long-\(t\) (edge-mode) driven.
+
+- In trophic/niche systems, \( \Delta R_{\mathrm{shape}}(t)\) retains a mid-\(t\) hump whose size tracks non-normality and \(\|[D,A]\|_F\).
+
+### What would falsify the story
+
+- If \(\rho\)-matching removes mid-\(t\) peaks even in strongly structured networks, then the earlier peaks were collectivity drift, not structural shape.
+
+- If \( \Delta R_{\mathrm{shape}}(t)\) is large at small \(t\) while \(D\) is identical, we failed to pin the time-scale regime (a bug in the transformation).
+
+- If diagnostics (non-normality, \([D,A]\), \(\kappa(Z)\)) do not correlate with mid-\(t\) excess, the interpretation needs revisiting.
+
+## Practical notes on transformations
+
+- **A-space shuffle.** Work in the real-Schur basis of \(A\): write \(A=ZTZ^\top\). Apply a block-orthogonal rotation \(U\) on the *bulk* Schur subspace, then reconstruct \(A' = Z (U^\top T U) Z^\top\). This preserves the *spectrum of \(A\)* exactly and leaves \(D\) unchanged.
+
+- **\(\rho\)-matching.** After any rewire \(A'\), compute \(\rho(A')\) and rescale by \(\rho(A)/\rho(A')\). This matches collectivity but allows other eigenvalues and eigenvectors to move—precisely what we want to attribute to “shape”.
+
+- **Why not J-space when we study structure?** Shuffling directly in \(J\)’s Schur basis mixes \(D\) and \(A\) and inevitably perturbs time-scales or the edge mode; that is fine as a *control*, but A-space is the clean place to isolate biotic structure.
+
+## Outputs to include in the figures
+
+For each level and manipulation:
+
+- Curves of \( |\Delta R_{\mathrm{raw}}(t)|, |\Delta R_{\mathrm{shape}}(t)|, |\Delta R_\sigma(t)| \).
+
+- Mean \( \widetilde R_{\mathrm{med}}(t)\) for the original and transformed systems to show small/mid/large-\(t\) anchoring.
+
+- Scatter of mid-\(t\) excess vs diagnostics \(\{\rho(A), \|A\|_F, \rho/\|A\|_F, \|[D,A]\|_F, \kappa(Z)\}\).
+
+- Recovery-time comparison: exact \(t_P\) vs proxy \(t_P^{\mathrm{flat}}\).
+
+## What this buys us conceptually
+
+- It turns “scrambling eigenvectors” into a **controlled partition**: how much change is due to *how much biotic strength exists* (collectivity), and how much is due to *where that strength lives* (shape).
+
+- It makes structured vs random comparisons meaningful: if structure elevates \(\rho(A)\), the \(\rho\)-matched analysis asks whether there is *anything left* that cannot be explained by a mere change in collective scale.
+
+- It connects directly to the theory of indirect effects and to non-normal transient growth, clarifying why mid-\(t\) is the natural place where structure should appear.
+
