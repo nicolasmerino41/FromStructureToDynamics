@@ -167,7 +167,7 @@ end
 # ------------------------------------------------------------
 using CairoMakie
 
-function plot_interaction_shuffle_results(res; title_top="Interaction-shuffle vs baseline")
+function plot_interaction_shuffle_results(res; title_top="Interaction-shuffle vs baseline when rho_sign=0, rho_mag=0.0 and deg_cv=0.0")
     fig = Figure(size=(1100, 720))
 
     ax1 = Axis(fig[1,1], xscale=log10, xlabel="t", ylabel="|ΔR̃med|", title=title_top)
@@ -198,10 +198,10 @@ end
 S, conn, mean_abs, mag_cv = 120, 0.10, 0.50, 0.60
 t_vals = 10 .^ range(-2, 2; length=40)
 
-res = run_interaction_shuffle_vs_baseline(; S, conn, mean_abs, mag_cv,
+res_base = run_interaction_shuffle_vs_baseline(; S, conn, mean_abs, mag_cv,
     deg_cv=0.0, u_mean=1.0, u_cv=0.6, t_vals, reps=40, seed=10000, perturb=:biomass)
 
-plot_interaction_shuffle_results(res)
+plot_interaction_shuffle_results(res_base)
 plot_rmed_dual(res.t, res.rmed_struct; title="Structured tER")
 plot_rmed_dual(res.t, res.rmed_scram;  title="Interaction-scrambled (diag pinned)")
 plot_rmed_dual(res.t, res.rmed_base0;  title="Baseline ER (source)")
