@@ -1,0 +1,172 @@
+---
+title: "The effect of structure at mid-t"
+author: "Nico, Núria & Jeff"
+date: "2025-11-13"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 5
+  html_document:
+    theme: flatly
+    toc: true
+    toc_depth: 5
+    number_sections: true
+    toc_float:
+      collapsed: false
+    highlight: tango
+  word_document:
+    toc: false
+    toc_depth: '5'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Goal
+
+Our goal is to isolate when network structure (not time scales) reduces predictability of the median return-rate \( \widetilde{R}_{med}(t) \) when rewiring, but isolating the effect of topology itself, discarding the effect of time scales changes. Purely random networks already lose predictability at large \( t \) because the slowest mode (resilience) shifts under rewiring; that is not informative about structure. A meaningful, non-trivial structural effect should show up at intermediate \( t \) (mid-\( t \)), where many modes contribute and eigenvector geometry matters.
+
+## Intuition and expectations
+
+* **Small \( t \)**: \( \widetilde{R}_{med}(t) \) is dominated by the diagonal/time-scale (TS) vector. If we keep TS fixed, small-\( t \) changes should be minimal.
+
+* **Large \( t \)**: \( \widetilde{R}_{med}(t) \to -\max \Re\lambda(J) \) (the slowest mode). If we lock or match the slowest eigenpair across comparisons, large-\( t \) differences should be small; otherwise, any change in resilience creates a trivial large-\( t \) gap.
+
+* **Mid \( t \)**: multiple modes and their non-orthogonality matter. Structured networks (sign patterning, magnitude correlation, model architecture) should display a mid-\( t \) gap that is larger than in random networks.
+
+We compare each structured network to a interaction-only perturbation that keeps TS identical but shuffles the eigenvectors of the interaction part (we freeze the slowest pair to maintain resilience as equal as possible), and we compare the results with random network baseline built and perturbed in the exact same way.
+
+For a level of structure we draw a community, form its Jacobian \( J \), and a perturbed version \( J^{(shff)} \) that:
+
+1. Preserves the diagonal TS
+2. Preserves the slowest eigenpair (freeze the edge)
+3. Shuffles the eigenvectors of the interaction part of the Jacobian 
+
+We then evaluate  
+
+\[
+\Delta_{struct}(t)
+= 
+\big|
+\widetilde{R}_{med}(J; t)
+-
+\widetilde{R}_{med}(J^{(shff)}; t)
+\big|.
+\]
+
+In parallel, we build a matched ER baseline pair \( (J_0, J_1) \) with the same interaction-only shuffling procedure and define  
+
+\[
+B(t)
+=
+\big|
+\widetilde{R}_{med}(J_0; t)
+-
+\widetilde{R}_{med}(J_1; t)
+\big|.
+\]
+
+The excess is  
+
+\[
+E(t)
+=
+\Delta_{struct}(t) - B(t).
+\]
+
+A positive bump of \( E(t) \) at mid-\( t \) would indicate a non-trivial structure-driven loss of predictability.
+
+# Pipeline
+
+## 1) Construction
+
+* **Same-u**: draw \( u \sim \) lognormal, we reuse the same \( u \) in all comparisons so small-\( t \) TS is matched.
+
+* **Edge freeze**: in the interaction-only transformation, we keep the slowest real-Schur block fixed so resilience is unchanged. *In reality, resilience will shift regardless, but this helps minimise its shift.*
+
+* **Baseline parity**:  
+  * **baseline**: ER \(\to\) ER with interaction-only shuffling (edge freeze).  
+  * **baselineStruct**: a duplicate of the baseline builder, used to confirm it behaves identically.
+
+* **Sanity checks** *(so far, it is impossible to make the both work simultaneously)*:
+  * \( |\lambda_{max}(J) - \lambda_{max}(J^{(shff)})| \le \varepsilon_{\lambda} \) (large-\( t \) matched)  
+  * \( \|\operatorname{diag}(J) - \operatorname{diag}(J^{(shff)})\|_{\infty} \le \varepsilon_{diag} \) (small-\( t \) matched)  
+  * Finite series for all sampled \( t \).
+
+## 2) Structure ladder
+
+We sweep a discrete path from "almost ER" to "strongly structured". Levels:
+
+1. ER  
+2. ER with degree CV  
+3. ER with degree CV + magnitude correlation  
+4. Trophic-ER (sign antisymmetry with degree CV)  
+5. Trophic-ER stronger  
+6. Niche trophic network  
+
+For each level we:
+
+* build \( J \),
+* build \( J^{(shff)} \) via interaction-only eigenvector shuffling with the slowest block frozen,
+* compute \( \Delta_{struct}(t) \), baseline \( B(t) \), and excess \( E(t) \),
+* average across replicates.
+
+## 3) Expectation
+
+* **ER-like levels**: \( E(t) \approx 0 \) at mid-\( t \). Any gap should concentrate at large \( t \) if the slowest mode drifts. Edge-freeze should removes this but it does not.
+
+* **Structured levels**: a mid-\( t \) bump in \( E(t) \), growing as sign patterning, magnitude correlation, and trophic/niche organization intensify.
+
+# Results
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(
+    Sys.getenv("USERPROFILE"),
+    "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/FiguresForTheEffectOfStruct/ExcessPerStructuralLevel.png")
+)
+```
+
+### Baseline Sanity Check
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/FiguresForTheEffectOfStruct/baseline.png"))
+```
+### ER
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/FiguresForTheEffectOfStruct/ER.png"))
+```
+### ER with degree CV  
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/FiguresForTheEffectOfStruct/degCV.png"))
+```
+### ER with degree CV + magnitude correlation  
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/FiguresForTheEffectOfStruct/degPlusMag.png"))
+```
+### Trophic-ER (sign antisymmetry with degree CV)  
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/FiguresForTheEffectOfStruct/trophic.png"))
+```
+### Trophic-ER +  
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/FiguresForTheEffectOfStruct/trophicPlus.png"))
+```
+### Niche trophic network 
+```{r echo=FALSE, out.width='70%', fig.align='center'}
+knitr::include_graphics(
+  file.path(Sys.getenv("USERPROFILE"),
+            "OneDrive/PhD/GitHub/FromStructureToDynamics/JacobianApproach/Rmarkdowns/FiguresForTheEffectOfStruct/niche.png"))
+```
+
