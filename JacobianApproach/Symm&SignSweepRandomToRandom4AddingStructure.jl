@@ -519,7 +519,7 @@ seed = 250463
 
 # 1) Degree heterogeneity sweep (applies to ER and niche)
 levels_deg = collect(range(0.00, 1.50; length=9))
-@time df_deg_different_u = run_rewire_axis_grid(
+@time df_deg_same_u = run_rewire_axis_grid(
     ; axis=:degcv, levels=levels_deg, t_vals=t_vals,
     reps=10, S=S, conn=conn, mean_abs=mean_abs, mag_cv=mag_cv, 
     u_mean=1.0, u_cv=0.6, degcv0=0.0,
@@ -528,10 +528,10 @@ levels_deg = collect(range(0.00, 1.50; length=9))
 )
 df_deg_different_u = df_deg
 # Rmed
-plot_rewire_axis_grid(df_deg_different_u, :degcv; title="Rewiring predictability Degree CV (|ΔR̃med|) Same u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
+plot_rewire_axis_grid(df_deg_same_u, :degcv; title="Rewiring predictability Degree CV (|ΔR̃med|) Same u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
 plot_rewire_axis_grid(df_deg_same_u, :degcv; title="Rewiring predictability Degree CV (|ΔR̃med|) Same u", absdiff=true, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
 # R2
-plot_rewire_axis_grid(df_deg_different_u, :degcv; title="Rewiring predictability Degree CV (R²) Same u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
+plot_rewire_axis_grid(df_deg_same_u, :degcv; title="Rewiring predictability Degree CV (R²) Same u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0", "TRdeg_to_NT", "NI_to_NT"])
 plot_rewire_axis_grid(df_deg_same_u, :degcv; title="Rewiring predictability Degree CV (R²) Same u", absdiff=false, lines_to_plot=["NT", "TRdeg", "NI", "TR0"])
 
 # 2) u_cv sweep
