@@ -1,54 +1,121 @@
-function build_ER_degcv(S::Int, conn::Float64, mean_abs::Float64, mag_cv::Float64,
-                        rho_mag::Float64, rho_sign::Float64, deg_cv::Float64;
-                        rng::AbstractRNG=MersenneTwister(42))
-
-    @assert 0.0 ≤ conn ≤ 1.0
-    @assert mean_abs > 0
+function build_ER_degcv(
+    S::Int, conn::Float64, mean_abs::Float64, mag_cv::Float64,
+    rho_pair::Float64, rho_mag::Float64, rho_sign::Float64, deg_cv::Float64;
+    rng::AbstractRNG=MersenneTwister(42)
+)
+    @assert 0 ≤ conn ≤ 1
+    @assert 0 ≤ rho_pair ≤ 1
+    @assert 0 ≤ rho_mag ≤ 1
+    @assert 0 ≤ rho_sign ≤ 1
     @assert mag_cv ≥ 0
-    @assert 0.0 ≤ rho_mag < 1.0 "use < 1 for numerical stability"
-    @assert 0.0 ≤ rho_sign ≤ 1.0
+    @assert mean_abs > 0
     @assert deg_cv ≥ 0
 
-    # Lognormal parameters for magnitudes
+    # ---- lognormal magnitude distribution ----
     σ2 = log(1 + mag_cv^2)
     σ  = sqrt(σ2)
     μ  = log(mean_abs) - σ2/2
     LN = LogNormal(μ, σ)
 
-    # Heterogeneous out-degree propensities
-    # (mean 1, CV = deg_cv, normalized to preserve global conn)
+    # ---- degree heterogeneity ----
     if deg_cv > 0
-        raw = rand(rng, LogNormal(-0.5 * log(1 + deg_cv^2), sqrt(log(1 + deg_cv^2))), S)
+        raw = rand(rng, LogNormal(-0.5 * log(1 + deg_cv^2),
+                                  sqrt(log(1 + deg_cv^2))), S)
         w = raw ./ mean(raw)
     else
         w = ones(S)
     end
 
-    # Magnitude correlation
-    Lmag = cholesky(Symmetric([1.0 rho_mag; rho_mag 1.0])).L
+    # ---- magnitude correlation ----
+    # (rho_mag determines correlation of underlying normals)
     stdN = Normal()
 
+    if rho_mag == 1.0
+        Lmag = nothing  # special-case handle later
+    elseif rho_mag == 0.0
+        Lmag = nothing  # draw independent later
+    else
+        C = Symmetric([1.0 rho_mag; rho_mag 1.0])
+        Lmag = cholesky(C).L
+    end
+
     A = zeros(Float64, S, S)
+
+    # ---------------------------------------------------------
+    # MAIN LOOP: Unordered pairs
+    # ---------------------------------------------------------
     for i in 1:S-1, j in i+1:S
-        # Adjusted connectance per source
+
+        # per-direction probabilities
         p_ij = conn * w[i]
         p_ji = conn * w[j]
 
-        if rand(rng) < p_ij
-            z = randn(rng, 2)
-            z .= Lmag * z
-            m1 = quantile(LN, cdf(stdN, z[1]))
-            m2 = quantile(LN, cdf(stdN, z[2]))
-            s1 = ifelse(rand(rng) < 0.5, 1.0, -1.0)
-            s2 = ifelse(rand(rng) < rho_sign, -s1, s1)
+        # ----------------------------
+        # 1. Decide existence of edges
+        # ----------------------------
+        if rand(rng) < rho_pair
+            # paired existence
+            exists = (rand(rng) < (p_ij + p_ji)/2)
+            has_ij = exists
+            has_ji = exists
+        else
+            # independent existence
+            has_ij = (rand(rng) < p_ij)
+            has_ji = (rand(rng) < p_ji)
+        end
+
+        if !has_ij && !has_ji
+            continue
+        end
+
+        # ----------------------------
+        # 2. Magnitudes
+        # ----------------------------
+        if has_ij && has_ji
+            # correlated lognormal magnitudes
+            if rho_mag == 0
+                m1 = rand(rng, LN)
+                m2 = rand(rng, LN)
+            elseif rho_mag == 1
+                m1 = rand(rng, LN)
+                m2 = m1
+            else
+                z = randn(rng, 2)
+                z .= Lmag * z
+                m1 = quantile(LN, cdf(stdN, z[1]))
+                m2 = quantile(LN, cdf(stdN, z[2]))
+            end
+        elseif has_ij
+            m1 = rand(rng, LN)
+            m2 = 0.0
+        else
+            m1 = 0.0
+            m2 = rand(rng, LN)
+        end
+
+        # ----------------------------
+        # 3. Signs (correlated)
+        # ----------------------------
+        # base sign
+        s1 = (rand(rng) < 0.5 ? 1.0 : -1.0)
+
+        if rand(rng) < rho_sign
+            # antisymmetric tendency
+            s2 = -s1
+        else
+            # symmetric/independent tendency
+            s2 = s1
+        end
+
+        # apply signs to magnitudes
+        if has_ij
             A[i,j] = s1 * m1
+        end
+        if has_ji
             A[j,i] = s2 * m2
-        elseif rand(rng) < p_ji
-            m  = rand(rng, LN)
-            s  = ifelse(rand(rng) < 0.5, 1.0, -1.0)
-            A[j,i] = s * m
         end
     end
+
     return A
 end
 
