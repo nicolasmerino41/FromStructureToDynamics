@@ -1,0 +1,278 @@
+---
+title: "Shape in ecological interaction matrices"
+author: "Nico, Núria & Jeff"
+date: "2025-11-21"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 5
+  html_document:
+    theme: flatly
+    toc: true
+    toc_depth: 5
+    number_sections: true
+    toc_float:
+      collapsed: false
+    highlight: tango
+  word_document:
+    toc: false
+    toc_depth: '5'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Conceptual map of collectivity and shape in ecological interaction matrices
+
+This document provides a pedagogical explanation of how ecological interaction matrices vary along two fundamentally different axes:
+
+* a collectivity axis, quantified by the spectral radius \( \rho(A) \)
+
+* a shape axis, quantified by patterns of directional alignment, asymmetry and non-normality
+
+We use five canonical matrix classes to illustrate the structure of this space:
+
+1. Symmetric mean-field matrix (maximal collectivity)
+
+2. Skew-symmetric mean-field matrix (pure rotation, zero collectivity)
+
+3. Triangular feed-forward matrix (pure feed-forward shape, zero collectivity)
+
+4. Real trophic networks (mixed shape)
+
+5. Random networks (near the origin)
+
+The goal is to provide an intuitive geometric map of where different ecological networks sit.
+
+
+# The two key axes: collectivity and shape
+
+## Collectivity axis
+
+Collectivity refers to how strongly interactions reinforce each other across the entire network.
+
+It is naturally quantified by the spectral radius:
+
+$$
+\rho(A) = \max_i |\lambda_i(A)|
+$$
+
+This quantity governs long-term amplification, stability margins and asymptotic growth of indirect effects. Large values of \( \rho(A) \) indicate strongly collective behaviour, where many indirect pathways reinforce each other. Values near zero indicate weak collectivity: interactions do not organize into coherent reinforcing cascades.
+
+## Shape axis
+
+Shape refers to the geometric structure of interactions: directionality, asymmetry, feed-forward structure and rotational feedback loops. Shape is fundamentally about non-normality:
+
+$$
+A^\top A \neq A A^\top
+$$
+
+Non-normality creates transient amplification, even if the spectral radius is small. Shape has at least two orthogonal directions:
+
+* rotation-based structure (cycles, skew-symmetry)
+
+* feed-forward structure (upper-triangular cascades)
+
+Real trophic networks combine both to different extents.
+
+# The conceptual plane
+
+We construct a qualitative 2D plane with axes:
+
+* horizontal: collectivity \( \rho(A) \), from 0 to its theoretical maximum
+
+* vertical: shape, measured as degree of directional non-normality
+
+Different matrix classes land in different regions of this plane.
+
+# Symmetric mean-field matrix: maximal collectivity, minimal shape
+
+## Definition
+
+$$
+A_{ij} = a \quad (i \neq j), \qquad A_{ii}=0
+$$
+
+This matrix is essentially rank-1, symmetric and normal.
+
+## Properties
+
+* All singular mass lies in one leading mode
+
+* No non-normality
+
+* Saturates the upper bound:
+
+$$
+\|A\|_2 = \|A\|_F
+$$
+
+* Maximally collective:
+
+$$
+\rho(A) = a (S-1)
+$$
+
+## Place in the plane
+
+* Far right (maximum collectivity)
+
+* Bottom (minimum shape)
+
+# Skew-symmetric mean-field matrix: pure rotation, zero collectivity
+
+## Definition
+
+$$
+A_{ij}=a, \qquad A_{ji}=-a
+$$
+
+Hence \( A^\top = -A \).
+
+## Properties
+
+* All eigenvalues are purely imaginary
+
+$$
+\rho(A) = 0
+$$
+
+* Very high non-normality of rotational type
+
+* Generates oscillatory transients but no asymptotic growth
+
+## Place in the plane
+
+* Horizontal position: \( \rho = 0 \)
+
+* Vertical position: high shape (pure rotation)
+
+This is the rotational extreme of the shape axis.
+
+# Triangular feed-forward matrix: pure cascades, zero collectivity
+
+## Definition
+
+A strictly upper-triangular matrix such as:
+
+$$
+A =
+\begin{pmatrix}
+0 & a & a \\
+0 & 0 & a \\
+0 & 0 & 0
+\end{pmatrix}
+$$
+
+## Properties
+
+* All eigenvalues are zero
+
+$$
+\rho(A)=0
+$$
+
+* Very high non-normality of feed-forward type
+
+* Produces strong unidirectional transient amplification
+
+## Place in the plane
+
+* Horizontal: \( \rho = 0 \)
+
+* Vertical: high shape, but of feed-forward type rather than rotational
+
+This is the feed-forward extreme of the shape axis.
+
+# Real trophic networks: mixtures of shape
+
+Real ecological networks contain:
+
+* hierarchical cascades (feed-forward structure)
+
+* weak or strong cycles (rotational structure)
+
+* asymmetry from predator-prey interactions
+
+* degree heterogeneity
+
+* partial modularity or layered structure
+
+Thus they sit:
+
+* horizontally: at intermediate or low collectivity
+
+* vertically: at mixed levels of shape, typically moderate to high
+
+They lie between the two pure-shape extremes.
+
+# Random networks: weak collectivity and weak shape
+
+Randomly placed interactions tend to:
+
+* have spectral radius following random-matrix scaling
+
+* have non-normality present but not aligned
+
+* lack coherent cascades or cycles
+
+They sit near the origin:
+
+* horizontally: low to medium \( \rho(A) \)
+
+* vertically: low structural shape because asymmetry is uncorrelated
+
+These are the least informative networks.
+
+# Plotting the conceptual plane
+
+This is only a schematic representation of where different matrix classes sit
+in the space defined by collectivity (horizontal axis) and shape
+(vertical axis).
+
+                    Shape (directional structure)
+                            ↑
+                            |
+             skew MF        |        triangular MF
+         (rotational        |        (feed-forward
+          structure)        |          structure)
+                            |
+                            |
+                            |
+                            |
+        random networks     |     (low shape, unaligned)
+              (low          |         ↑
+             collectivity)  |         |
+                            |
+          +------------------------------------→
+                collectivity  \(\rho\)(A)
+                (asymptotic amplification)
+
+                            |
+                            |
+                            |
+                            |
+                            |
+                            symmetric MF
+                     (maximal collectivity,
+                      minimal shape)
+
+\newpage
+
+Interpretation:
+
+* symmetric mean-field matrix sits at extreme collectivity with no shape
+
+* skew-symmetric mean-field sits at extreme rotational shape with zero collectivity
+
+* triangular feed-forward matrix sits at extreme feed-forward shape with zero collectivity
+
+* real trophic networks lie in the upper-left region (low collectivity, high shape)
+
+* random networks lie near the origin (low shape, low collectivity)
+
+# Conclusions
+
+This conceptual plane clarifies why manipulations that preserve \( \rho \) but distort shape can dramatically change transient amplification. It also explains why trophic networks behave differently from random matrices when rewired and when scaled: their shape is structured, not scattered. It frames non-normality as a multidimensional phenomenon rather than a single quantity, and motivates separating collectivity \( \rho(A) \) from shape using multiple structural baselines such as skew-symmetric and triangular extremes.
+
