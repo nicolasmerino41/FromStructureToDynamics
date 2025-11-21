@@ -9,35 +9,77 @@ if true, assigns onto a fresh uniform random set of K unordered pairs.
 
 Returns a new matrix with same S and same multiset of pair values.
 """
-function rewire_pairs_preserving_values(A::AbstractMatrix{<:Real};
-        rng::AbstractRNG=Random.default_rng(), random_targets::Bool=true)
+function rewire_pairs_preserving_values(
+        A::AbstractMatrix{<:Real};
+        rng::AbstractRNG=Random.default_rng(),
+        random_targets::Bool=true,
+        preserving_pairs::Bool=true)
+
     S = size(A,1); @assert size(A,2) == S
-    # source pairs and their ordered values
-    src = Tuple{Int,Int}[]; vals = Tuple{Float64,Float64}[]
+
+    src = Tuple{Int,Int}[]
+    vals = preserving_pairs ? Tuple{Float64,Float64}[] : Float64[]
+
     @inbounds for i in 1:S-1, j in i+1:S
         v1 = A[i,j]; v2 = A[j,i]
         if v1 != 0.0 || v2 != 0.0
-            push!(src, (i,j)); push!(vals, (float(v1), float(v2)))
+            push!(src, (i,j))
+            if preserving_pairs
+                push!(vals, (float(v1), float(v2)))
+            else
+                push!(vals, float(v1))
+                push!(vals, float(v2))
+            end
         end
     end
-    K = length(src); K == 0 && return zeros(Float64, S, S)
 
-    # choose targets
-    tgt = if random_targets
-        allpairs = [(i,j) for i in 1:S-1 for j in i+1:S]
-        sample(rng, allpairs, K; replace=false)
+    if preserving_pairs
+        K = length(src)
+        K == 0 && return zeros(Float64,S,S)
+
+        tgt = if random_targets
+            allpairs = [(i,j) for i in 1:S-1 for j in i+1:S]
+            sample(rng, allpairs, K; replace=false)
+        else
+            shuffle(rng, copy(src))
+        end
+
+        perm = shuffle(rng, collect(1:K))
+        B = zeros(Float64,S,S)
+
+        @inbounds for k in 1:K
+            (p,q) = tgt[k]
+            (v1,v2) = vals[perm[k]]
+            B[p,q] = v1
+            B[q,p] = v2
+        end
+
+        return B
+
     else
-        shuffle(rng, copy(src))
-    end
+        # not preserving pairs — treat each directional value independently
+        K = length(vals)
+        K == 0 && return zeros(Float64,S,S)
 
-    perm = shuffle(rng, collect(1:K))
-    B = zeros(Float64, S, S)
-    @inbounds for k in 1:K
-        (p,q) = tgt[k]
-        (v1,v2) = vals[perm[k]]
-        B[p,q] = v1;  B[q,p] = v2    # keep ordered pair values
+        # all directed positions i≠j
+        allpos = [(i,j) for i in 1:S for j in 1:S if i != j]
+
+        tgt = if random_targets
+            sample(rng, allpos, K; replace=false)
+        else
+            shuffle(rng, copy(allpos))[1:K]
+        end
+
+        perm = shuffle(rng, collect(1:K))
+        B = zeros(Float64,S,S)
+
+        @inbounds for k in 1:K
+            (p,q) = tgt[k]
+            B[p,q] = vals[perm[k]]
+        end
+
+        return B
     end
-    return B
 end
 
 # ------------------ u–|A| row-load alignment (simple, fast) -------------------
