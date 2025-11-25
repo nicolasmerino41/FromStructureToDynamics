@@ -76,3 +76,7 @@ These features route disturbances along different pathways, producing distinguis
 ## Towards a finer understanding of which structures matter
 
 The results so far show that intermediate–time behaviour is sensitive to structural information, but they do not yet isolate which components are most responsible. Some structural attributes may exert a large influence on transient behaviour, while others may be negligible once overall interaction magnitudes are accounted for. A more detailed analysis is needed to determine precisely which elements of community organisation drive mid–time sensitivity and how they do so.
+
+$$
+\text{Transient amplification} \approx \text{hierarchical flow strength}
+$$
