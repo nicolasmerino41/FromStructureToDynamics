@@ -6,7 +6,7 @@ function make_antisym_matrix(S, gp)
         A[j,i] = -p_ij * (2*rand() - 1)
     end
     return A
-end
+end   
 
 A = make_antisym_matrix(50, 1.0)
 println(A)
