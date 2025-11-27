@@ -1,0 +1,148 @@
+---
+title: "Trophic Coherence"
+author: "Nico, Núria & Jeff"
+date: "2025-11-27"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 5
+  html_document:
+    theme: flatly
+    toc: true
+    toc_depth: 5
+    number_sections: true
+    toc_float:
+      collapsed: false
+    highlight: tango
+  word_document:
+    toc: false
+    toc_depth: '5'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Directionality, Coherence, Non-normality, and Mid-time Amplification
+
+This section synthesises three theoretical pillars:
+
+1. Johnson et al. (2025): influence and global directionality in directed networks  
+2. Arnoldi et al. (2018): short-to-mid-term recovery and geometric amplification  
+3. Our own results: how food-web structure shapes mid-time amplification through biomass projection
+
+These ideas converge into a single viewpoint: non-normality alone is insufficient. What matters is how ecological structure channels biomass into the non-normal transient growth modes.
+
+## 1. Directionality and trophic coherence
+
+Directed networks possess two complementary forms of hierarchy:
+
+- a local measure, the trophic level of each species  
+- a global measure, the degree to which directed edges align with these levels
+
+Johnson et al. show that networks with low trophic incoherence (small \(F\)) are strongly directional: most links run from low to high levels, forming clear energetic paths. When \(F\) is large, loops become common, omnivory proliferates, and directionality disappears.
+
+These regimes behave differently:
+
+- coherent networks exhibit strong structural asymmetries  
+- incoherent networks approximate balanced, nearly symmetric digraphs  
+- the pseudospectral radius grows with coherence  
+- influence becomes sharply heterogeneous in coherent networks but fully homogeneous when coherence is high
+
+The key point is that global directionality, not just the presence of directed edges, shapes the geometry of dynamical responses.
+
+## 2. Non-normality and its dynamical meaning
+
+A matrix is non-normal when \(J^T J \neq J J^T\). This property ensures that left and right eigenvectors fail to be orthogonal. As a result:
+
+- a stable system may nevertheless exhibit transient growth  
+- perturbations aligned with special directions experience amplification  
+- pseudospectral sensitivity increases dramatically  
+- feedback loops can be suppressed or enhanced depending on edge orientation
+
+In coherent trophic networks, non-normality emerges naturally because triangular or nearly triangular matrices are maximally non-normal. But non-normality alone does not cause amplification. It merely creates the potential.
+
+## 3. Recovery dynamics and biomass projections
+
+Arnoldi's framework evaluates stability through the time-dependent quantity
+
+$$
+\widetilde{R}_{\text{med}}(t)
+=
+- \frac{1}{t}
+\log\left(
+\frac{\sum_i u_i^2 \| e^{tJ} \|_{2,i}^2}
+     {\sum_i u_i^2}
+\right).
+$$
+
+This is a projected measure, not a spectral norm or a worst-case operator bound. It weights each species by its biomass and averages their squared responses. Consequently:
+
+- transient amplification depends on which directions in phase space are excited  
+- the biomass vector selects a specific linear combination of transient modes  
+- eigenvector geometry and biomass geometry interact nontrivially
+
+A highly non-normal system can show no transient amplification if the biomass vector is orthogonal to its amplifying modes. Conversely, a mildly non-normal system may show dramatic growth if biomass aligns with the correct directions.
+
+This creates a triangular relationship:
+
+- directionality shapes the space of possible amplifications  
+- coherence sharpens and strengthens these geometric directions  
+- biomass determines which of them are actually used
+
+## 4. Linking directionality, coherence, and amplification
+
+Johnson et al. show that influence concentrates in low-level nodes when coherence is high: a node near the base of a directional hierarchy can reach most of the network, while high-level nodes cannot reach downward. This asymmetry vanishes when incoherence grows.
+
+In ecological terms:
+
+- coherent networks direct energy upwards  
+- loopy networks recycle energy in all directions  
+- coherent networks embed strong feed-forward amplifying pathways  
+- incoherent networks dissolve pathways into symmetric loops
+
+Our results match this theory precisely. When we preserve or enhance directional order, mid-time amplification becomes large, structured, and predictable. When we inject loops or omnivory, amplification flattens out and becomes weaker.
+
+## 5. Why coherence modulates mid-time amplification
+
+Coherence determines the degree to which a trophic system resembles a triangular matrix. Triangular matrices have:
+
+- maximally non-orthogonal eigenvectors  
+- strong left–right asymmetry  
+- large pseudospectral radii  
+- consistent amplification cones in state space
+
+In contrast, incoherent networks become balanced:
+
+- eigenvectors approach orthogonality  
+- feedback loops dominate  
+- pseudospectra contract  
+- no preferred amplifying direction exists
+
+The mid-time window is exactly where such asymmetries manifest. Early-time behaviour is dominated by local diagonal terms, while late-time behaviour reflects the dominant eigenvalue. The intermediate window reveals geometric structure, and therefore depends strongly on directionality and coherence.
+
+## 6. Biomass–mode alignment: the central mechanism
+
+The crucial observation is that amplification does not arise simply because structure is directional or coherent. Amplification arises because the biomass vector projects nontrivially onto the transient growth modes defined by that structure.
+
+This provides a unified interpretation:
+
+- coherence sets the axes of amplification  
+- non-normality sets their sharpness  
+- biomass determines whether they are excited  
+
+Therefore, two networks with identical non-normality can exhibit very different responses if their biomass distributions differ. Likewise, rewiring that preserves coherence produces minimal dynamical change, while rewiring that destroys coherence remaps transient-growth directions completely.
+
+## 7. Implications for ecological dynamics
+
+The overall picture is:
+
+- global directionality governs structural potential for transient growth  
+- trophic coherence amplifies this potential by aligning edges with the hierarchy  
+- non-normality describes the geometry of possible amplification  
+- biomass determines the realised amplification
+
+This suggests that ecological communities possess a form of transient recoverability that is simultaneously structural and state-dependent. Structural properties create channels for amplification, but whether perturbations traverse these channels depends entirely on the distribution of biomass.
+
+Such a perspective unifies ideas from stability theory, directed complex networks, and trophic ecology, offering a mechanistic bridge between network architecture and dynamical response.
+
