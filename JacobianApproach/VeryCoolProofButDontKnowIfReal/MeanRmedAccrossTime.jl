@@ -7,8 +7,6 @@ function mean_curve(curves::Vector{Vector{Float64}})
     return avg
 end
 
-using CairoMakie
-
 function plot_rmed_mean_grid(results, t_vals;
         q_targets = sort(collect(keys(results))),
         figsize = (1600, 1400)
