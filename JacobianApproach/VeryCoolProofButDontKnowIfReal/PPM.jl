@@ -1,7 +1,7 @@
 using LinearAlgebra, Measures
 using Distributions
-# using Graphs
-# using GraphPlot
+using Graphs
+using GraphPlot
 using CategoricalArrays
 using NetworkLayout, GraphMakie
 """
@@ -50,7 +50,7 @@ end
 
 Generate adjacency matrix A using the Preferential Preying Model.
 """
-function ppm_exact(S, B, L, T)
+function ppm(S, B, L, T)
     A = zeros(Int, S, S)
 
     β = (S^2 - B^2) / (2L - 1)
@@ -85,7 +85,7 @@ function ppm_exact(S, B, L, T)
             probs = [exp(-abs(s_hat[j] - s_hat[ℓ]) / T) for ℓ in existing]
             probs ./= sum(probs)
 
-            chosen = rand(Categorical(probs), k_extra)
+            chosen = rand(Distributions.Categorical(probs), k_extra)
             for idx in unique(chosen)
                 prey = existing[idx]
                 A[i, prey] = 1
@@ -112,7 +112,6 @@ end
 
 
 # --- Builder Object --------------------------------------------------------
-
 mutable struct PPMBuilder
     S::Int
     B::Int
@@ -147,7 +146,7 @@ function build(b::PPMBuilder)
 end
 
 b = PPMBuilder()
-set!(b; S=120, B=24, L=2142, T=1.5)
+set!(b; S=120, B=24, L=2142, T=0.01)
 
 result = build(b)
 
@@ -204,7 +203,7 @@ Plots the PPM network with:
 - arrow edges
 - color bins by TL (basal green, TL∈[1,2)=blue, [2,3)=orange, [3,4)=red)
 """
-function visualize_escalator(A, s; B, xnoise=0.75, figres=(1600,1200))
+function visualize_escalator(A, s; B, xnoise=0.75, figres=(1100,620))
 
     g = DiGraph(A)
     S = length(s)
