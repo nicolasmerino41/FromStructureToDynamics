@@ -45,7 +45,7 @@ function run_pipeline_rmed!(
             b = PPMBuilder()
             η_value = 0.2
             set!(b; S=S, B=B, L=L, T=qtarget, η=η_value)
-            @show b
+            
             net = build(b)
 
             A = net.A
@@ -109,7 +109,7 @@ end
 
 function plot_rmed_grid_with_reference(results, t_vals;
         q_targets = sort(collect(keys(results))),
-        q_ref = 0.01,
+        q_ref = 0.0,
         figsize = (1100,720),
         title = ""
     )
