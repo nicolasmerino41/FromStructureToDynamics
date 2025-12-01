@@ -4,7 +4,7 @@ end
 
 function plot_rmed_delta_grid(results, t_vals;
         q_targets = sort(collect(keys(results))),
-        q_ref = 0.01,
+        q_ref = 0.0,
         figsize = (1100,720),
         title = ""
     )
@@ -19,13 +19,13 @@ function plot_rmed_delta_grid(results, t_vals;
         mean_q = mean_curve(results[q])
         Δ = delta_curve(mean_q, ref_mean)
         m = maximum(Δ)
-        # lso = minimum(Δ)
+        lso = minimum(Δ)
         if m > global_max
             global_max = m
         end
-        # if lso < global_min
-        #     global_min = lso
-        # end
+        if lso < global_min
+            global_min = lso
+        end
     end
 
     fig = Figure(size=figsize)
@@ -49,7 +49,7 @@ function plot_rmed_delta_grid(results, t_vals;
         )
 
         lines!(ax, t_vals, Δ; color=:blue, linewidth=3)
-        ylims!(ax, global_min-abs(global_max*0.1), global_max+global_max*0.1)   # --- 2) apply shared y-limit ---
+        ylims!(ax, global_min-abs(global_max*0.1), global_max+global_max*0.1)
         idx += 1
     end
 
