@@ -69,7 +69,7 @@ function run_pipeline_rmed!(
 
         results[qtarget] = curves
     end
-
+    
     return results, t_vals
 end
 
@@ -109,7 +109,7 @@ end
 
 function plot_rmed_grid_with_reference(results, t_vals;
         q_targets = sort(collect(keys(results))),
-        q_ref = 0.0,
+        q_ref = 0.01,
         figsize = (1100,720),
         title = ""
     )
@@ -163,9 +163,9 @@ results, t_vals = run_pipeline_rmed!(
     rng = Random.default_rng()
 )
 
-plot_rmed_grid_with_reference(results, t_vals; title="U_cv = 0.5, mag_abs = 1.0, mag_cv = 0.5, corr = 0.0")
-plot_rmed_mean_grid_with_reference(results, t_vals, title = "U_cv = 0.5, mag_abs = 1.0, mag_cv = 0.5, corr = 0.0")
-plot_rmed_delta_grid(results, t_vals; title = "U_cv = 0.5, mag_abs = 1.0, mag_cv = 0.5, corr = 0.0")
+plot_rmed_grid_with_reference(results, t_vals; title="MODULARITY")
+plot_rmed_mean_grid_with_reference(results, t_vals, title = "DEGREE DISTRIBUTION")
+plot_rmed_delta_grid(results, t_vals; title = "MODULARITY")
 
 for u in [0.5, 2.0], mag_abs in [0.3, 1.0], corr in [0.0, 0.99]
     results, t_vals = run_pipeline_rmed!(
