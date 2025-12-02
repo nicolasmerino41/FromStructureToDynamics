@@ -34,15 +34,14 @@ function trophic_incoherence(A, s)
     return sqrt(mean(xs.^2) - 1)
 end
 
+# """
+#     interaction_matrix(A, η=0.2)
 
-"""
-    interaction_matrix(A, η=0.2)
-
-Compute W = ηA - Aᵀ.
-"""
-function interaction_matrix(A; η=0.2)
-    return η .* A .- transpose(A)
-end
+# Compute W = ηA - Aᵀ.
+# """
+# function interaction_matrix(A; η=0.2)
+#     return η .* A .- transpose(A)
+# end
 
 
 """
@@ -140,13 +139,18 @@ function build(b::PPMBuilder)
     A, s = ppm(b.S, b.B, b.L, b.T)
     s = trophic_levels(A)
     q = trophic_incoherence(A, s)
-    W = interaction_matrix(A, η=b.η)
+    W = build_interaction_matrix(
+        A;
+        mag_abs=1.0,
+        mag_cv=0.5,
+        corr_aij_aji=0.99
+    )
 
     return (A=A, s=s, q=q, W=W)
 end
 
 b = PPMBuilder()
-set!(b; S=120, B=24, L=2142, T=0.01)
+set!(b; S=120, B=24, L=2142, T=1.5)
 
 result = build(b)
 
