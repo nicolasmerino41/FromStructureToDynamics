@@ -1,5 +1,5 @@
-using Interpolations# --- Asymptotic resilience: R∞ = -Re(λ_dom) ---
-
+using Interpolations
+# --- Asymptotic resilience: R∞ = -Re(λ_dom) ---
 function asymptotic_resilience(J)
     λmax = maximum(real.(eigvals(J)))
     return -λmax
@@ -26,6 +26,43 @@ end
 mean_curve(curves) = [mean(c[i] for c in curves) for i in 1:length(curves)]
 delta_curve(mean_q, mean_ref) = abs.(mean_q .- mean_ref)
 
+############################################################
+# 1. Compute D(t) = || exp(J t) u ||
+############################################################
+function compute_distance_curve(J, u, t_vals)
+    D = similar(t_vals)
+    for (i, t) in enumerate(t_vals)
+        x_t = exp(J * t) * u        # state after time t
+        D[i] = norm(x_t)            # distance to equilibrium
+    end
+    return D
+end
+
+############################################################
+# 2. Compute t95: time when D(t)/D(0) <= 0.05
+############################################################
+function compute_t95(D, t_vals; threshold = 0.05)
+    D0 = D[1]
+    ratio = D ./ D0
+    idx = findfirst(ratio .<= threshold)
+    return isnothing(idx) ? Inf : t_vals[idx]
+end
+
+############################################################
+# 3. Compute τ-axis = t_vals / t95
+############################################################
+function compute_tau_axis(t_vals, t95)
+    if isinf(t95)
+        return fill(NaN, length(t_vals))
+    else
+        return t_vals ./ t95
+    end
+end
+
+############################################################
+# 4. --- MAIN PIPELINE USING ARNOLDI CORRECT t95 DEFINITION ---
+############################################################
+
 function run_pipeline_rmed_standardized!(
         B, S, L;
         q_targets = range(0.01, 1.5, length=9),
@@ -34,52 +71,70 @@ function run_pipeline_rmed_standardized!(
         mag_cv = 0.5,
         corr = 0.0,
         u_cv = 0.5,
-        t_vals = 10 .^ range(log10(0.01), log10(100.0), length=30),
-        u = u,
+        t_vals = 10 .^ range(log10(0.01), log10(100.0), length=60),
+        u,
         rng = Random.default_rng()
     )
 
-    # storage containers
-    results = Dict{Float64, Vector{Vector{Float64}}}()
-    Js      = Dict{Float64, Matrix{Float64}}()
-    τ_axes  = Dict{Float64, Vector{Float64}}()
-
-    # --- fixed u for ALL communities (as you said) ---
-    # u = random_u(S; mean=1.0, cv=u_cv, rng=rng)
+    results = Dict{Float64, Vector{Vector{Float64}}}()     # rmed curves (unchanged)
+    Js      = Dict{Float64, Matrix{Float64}}()             # one Jacobian per q
+    τ_axes  = Dict{Float64, Vector{Float64}}()             # new tau axes (method 2)
+    t95_vals = Dict{Float64, Float64}()                    # store t95 per q
 
     for q in q_targets
         curves_q = Vector{Vector{Float64}}()
 
+        # -------------------------------
+        # Build interaction + Jacobian
+        # -------------------------------
         for rep in 1:replicates
-            # ---- Build PPM ----
+
+            # Build PPM
             b = PPMBuilder()
             set!(b; S=S, B=B, L=L, T=q, η=0.2)
-
             net = build(b)
-            A, s, qeff, W = net.A, net.s, net.q, net.W
+            A = net.A
 
-            # ---- Jacobian ----
+            # Interaction matrix
+            W = build_interaction_matrix(A;
+                mag_abs=mag_abs,
+                mag_cv=mag_cv,
+                corr_aij_aji=corr,
+                rng=rng
+            )
+
+            # Jacobian
             J = jacobian(W, u)
-            Js[q] = J   # store once (overwritten each rep but identical statistics)
+            Js[q] = J       # store any one of them
 
-            # ---- rmed(t) ----
-            rcurve = compute_rmed_curve(J, u, t_vals)
-            push!(curves_q, rcurve)
+            # rmed curve (unchanged)
+            push!(curves_q, compute_rmed_curve(J, u, t_vals))
         end
 
-        # ---- standardize time for this q ----
-        τ_vals, tP, Rinf = standardized_time_axis(t_vals, Js[q])
-        τ_axes[q] = τ_vals
+        # ----------------------------------------------------------
+        # Compute CORRECT D(t) curve from Arnoldi
+        # ----------------------------------------------------------
+        J = Js[q]
+        D_curve = compute_distance_curve(J, u, t_vals)
+
+        # Compute t95 (first time D(t)/D(0) <= 0.05)
+        t95 = compute_t95(D_curve, t_vals)
+        t95_vals[q] = t95
+
+        # τ-axis (if system never reaches 5%, τ = NaN)
+        τ_axes[q] = compute_tau_axis(t_vals, t95)
 
         results[q] = curves_q
-        println("Finished q = $q   (R∞ = $(round(Rinf,digits=3)), tP = $(round(tP, digits=3)))")
+
+        println("Finished q = $q   (t95 = $t95)")
     end
 
-    return results, τ_axes, Js, t_vals
+    params = (mag_abs=mag_abs, mag_cv=mag_cv, corr=corr)
+    return results, τ_axes, Js, t_vals, t95_vals, params
 end
 
 function plot_rmed_grid_with_reference_tau(
-        results, τ_axes;
+        results, τ_axes, params;
         q_targets = sort(collect(keys(results))),
         reference = :lowest,
         S, B, L, η, u, t_vals,
@@ -92,8 +147,10 @@ function plot_rmed_grid_with_reference_tau(
             error("reference must be :lowest or :highest")
 
     # rebuild reference replicates
-    ref_curves, τ_ref = build_reference_rmed!(q_ref, S, B, L, η, u, t_vals;
-                                             replicates_ref = replicates_ref)
+    ref_curves, τ_ref = build_reference_rmed!(
+        q_ref, S, B, L, η, u, t_vals, params;
+        replicates_ref = replicates_ref
+    )
 
     # transform τ → log10(1+τ)
     # τ_ref_plot = tau_to_logtau(τ_ref)
@@ -136,7 +193,7 @@ function plot_rmed_grid_with_reference_tau(
 end
 
 function plot_rmed_mean_grid_with_reference_tau(
-        results, τ_axes;
+        results, τ_axes, params;
         q_targets = sort(collect(keys(results))),
         reference = :lowest,
         S, B, L, η, u, t_vals,
@@ -148,8 +205,10 @@ function plot_rmed_mean_grid_with_reference_tau(
             (reference == :highest) ? last(q_targets)  :
             error("reference must be :lowest or :highest")
 
-    ref_curves, τ_ref = build_reference_rmed!(q_ref, S, B, L, η, u, t_vals;
-                                             replicates_ref = replicates_ref)
+    ref_curves, τ_ref = build_reference_rmed!(
+        q_ref, S, B, L, η, u, t_vals, params;
+        replicates_ref = replicates_ref
+    )
 
     ref_mean = mean_curve(ref_curves)
     # τ_ref_plot = tau_to_logtau(τ_ref)
@@ -187,7 +246,7 @@ function plot_rmed_mean_grid_with_reference_tau(
 end
 
 function plot_rmed_delta_grid_tau(
-        results, τ_axes;
+        results, τ_axes, params;
         q_vals=sort(collect(keys(results))),
         reference = :lowest,
         S::Int, B::Int, L::Int, η,
@@ -204,7 +263,7 @@ function plot_rmed_delta_grid_tau(
 
     # --- build fresh reference curves ---
     ref_curves, τ_ref = build_reference_rmed!(
-        q_ref, S, B, L, η, u, t_vals;
+        q_ref, S, B, L, η, u, t_vals, params;
         replicates_ref=replicates_ref,
         rng=rng
     )
@@ -258,6 +317,7 @@ function plot_rmed_delta_grid_tau(
 
         lines!(ax, τ_common, Δ_common; color=:blue, linewidth=3)
         ylims!(ax, ylims...)  # apply global y limits
+        xlims!(ax, (-0.1, 1.1))
 
         idx += 1
     end
@@ -266,19 +326,33 @@ function plot_rmed_delta_grid_tau(
 end
 
 function build_reference_rmed!(
-        q_ref, S, B, L, η, u, t_vals;
+        q_ref, S, B, L, η, u, t_vals, params;
         replicates_ref = 30,
         rng = Random.default_rng()
     )
 
     curves = Vector{Vector{Float64}}()
+    mag_abs = params.mag_abs
+    mag_cv  = params.mag_cv
+    corr    = params.corr
 
     for rep in 1:replicates_ref
         b = PPMBuilder()
-        set!(b; S=S, B=B, L=L, T=q_ref, η=η)
+        η_value = 0.2
+        set!(b; S=S, B=B, L=L, T=q_ref, η=η_value)
+        
         net = build(b)
 
-        W = net.W
+        A = net.A
+
+        # Interaction matrix
+        W = build_interaction_matrix(A;
+            mag_abs=mag_abs,
+            mag_cv=mag_cv,
+            corr_aij_aji=corr,
+            rng=rng
+        )
+
         J = jacobian(W, u)
 
         rcurve = compute_rmed_curve(J, u, t_vals)
@@ -297,25 +371,25 @@ tau_to_logtau(tau) = log10.(1 .+ tau)
 
 S, B, L = 120, 24, 2142
 u = random_u(S, mean=1.0, cv=0.5)
-results, τ_axes, Js, t_vals = run_pipeline_rmed_standardized!(
+results, τ_axes, Js, t_vals, params = run_pipeline_rmed_standardized!(
     B, S, L;
-    mag_abs = 1.0,
+    mag_abs = 0.5,
     mag_cv = 0.5,
-    corr = 1.0,
-    u_cv = 0.5,
+    corr = 0.0,
+    u_cv = 2.0,
     t_vals = 10 .^ range(log10(0.01), log10(100.0), length=30),
     u = u,
     rng = Random.default_rng()
-)
+);
 
-plot_rmed_grid_with_reference_tau(results, τ_axes;
+plot_rmed_grid_with_reference_tau(results, τ_axes, params;
     reference = :lowest,
     S=S, B=B, L=L, η=0.2, u=u, t_vals=t_vals)
 
-plot_rmed_mean_grid_with_reference_tau(results, τ_axes;
+plot_rmed_mean_grid_with_reference_tau(results, τ_axes, params;
     reference = :lowest,
     S=S, B=B, L=L, η=0.2, u=u, t_vals=t_vals)
 
-plot_rmed_delta_grid_tau(results, τ_axes;
+plot_rmed_delta_grid_tau(results, τ_axes, params;
     reference = :lowest,
     S=S, B=B, L=L, η=0.2, u=u, t_vals=t_vals)
