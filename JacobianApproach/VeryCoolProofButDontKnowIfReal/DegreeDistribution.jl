@@ -336,7 +336,7 @@ results, τ_axes, Js, t_vals = run_pipeline_degree_rmed!(
     S, L; u = u,
     alpha_vals = range(0, 2, length=9),
     replicates = 30,
-    mag_abs = 1.0,
+    mag_abs = 0.5,
     mag_cv = 0.5,
     u_cv = 0.5,
     corr = 0.0
