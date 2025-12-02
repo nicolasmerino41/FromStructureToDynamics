@@ -149,6 +149,53 @@ function within_q_variant(Aplus; rng=Xoshiro(42))
     return Anewplus, Anew
 end
 
+"""
+    compute_rmed_series_stable(J, u, t_vals; perturb=:biomass, margin=1e-6)
+
+Exact, overflow-safe evaluation of R̃med(t) via real-Schur with a spectral shift.
+Takes J’s Schur J = Z*T*Z'. Let μ = max Re(λ(J)) + margin. Define Es(t) = exp(t*(J-μI)).
+Then exp(tJ) = exp(μ t) * Es(t), and
+
+    tr( exp(tJ) C exp(tJ)' ) = exp(2 μ t) * tr( Es(t) C Es(t)' )
+
+so inside log we add 2 μ t back. This is algebraically exact and prevents overflow.
+"""
+function compute_rmed_series_stable(J::AbstractMatrix{<:Real},
+                                   u::AbstractVector{<:Real},
+                                   t_vals::AbstractVector{<:Real};
+                                   perturb::Symbol=:biomass,
+                                   margin::Float64=1e-6)
+
+    F = schur(Matrix{Float64}(J))     # real Schur: J = Z*T*Z'
+    Z, T, vals = F.Z, F.T, F.values
+
+    w = perturb === :biomass ? (u .^ 2) :
+        perturb === :uniform ? fill(1.0, length(u)) :
+        error("Unknown perturbation: $perturb")
+    sqrtw = sqrt.(w)
+
+    # We compute Y(t) = exp(t*(T - μI)) * (Z' * diag(sqrt(w)))  and then ||Y||_F^2.
+    M = transpose(Z) * Diagonal(sqrtw)
+
+    μ = maximum(real.(vals)) + margin
+    I_T = Matrix{Float64}(I, size(T,1), size(T,2))   # explicit I for clarity
+
+    out = Vector{Float64}(undef, length(t_vals))
+    @inbounds for (k, t) in pairs(t_vals)
+        # Stable exponential of the shifted real-Schur factor
+        Y = exp(t .* (T .- μ .* I_T)) * M
+        s = sum(abs2, Y)                 # Frobenius norm squared
+        # exact shift correction inside the log:
+        num = (log(s) + 2.0*μ*t)
+        den = log(sum(w))
+        out[k] = - (num - den) / (2.0*t)
+        if !isfinite(out[k])
+            out[k] = NaN                 # caller will skip this rep if any NaN
+        end
+    end
+    return out
+end
+
 function compute_curve(A, u, t)
     compute_rmed_series_stable(jacobian(A,u), u, t)
 end
