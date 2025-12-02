@@ -24,7 +24,7 @@ Construct signed interaction matrix W from adjacency A (prey→predator).
 function build_interaction_matrix(A;
         mag_abs=1.0,
         mag_cv=0.5,
-        corr_aij_aji=1.0,
+        corr_aij_aji=0.99,
         rng=Random.default_rng())
 
     S = size(A,1)
