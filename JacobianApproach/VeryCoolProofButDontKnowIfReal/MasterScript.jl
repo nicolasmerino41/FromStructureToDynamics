@@ -1,287 +1,486 @@
+############################################################
+# UNIFIED STRUCTURAL PIPELINE — REAL NETWORK FUNCTIONS ONLY
+############################################################
+
 using Random
 using LinearAlgebra
+using Distributions
 using Interpolations
 using CairoMakie
 
-# ================================================================
-# 1. GENERATE u-VECTORS WITH VARIABLE HETEROGENEITY
-# ================================================================
+############################################################
+# 2. JACOBIAN + RMED (your real functions must exist)
+############################################################
+
+# we assume:
+# jacobian(W,u)
+# median_return_rate(J,u; t=..., perturbation=:biomass)
+
+function compute_rmed_curve(J, u, t_vals)
+    r = similar(t_vals)
+    for i in eachindex(t_vals)
+        r[i] = median_return_rate(J, u; t=t_vals[i])
+    end
+    return r
+end
+
+
+############################################################
+# 3. STABILITY + SAFE τ PER NETWORK (Option B4)
+############################################################
 
 """
-    generate_u_list(S; cv_range=range(0.1,1.0,length=5))
+    safe_tau(t_vals, J)
 
-Generates a list of u vectors of size S, each with a different CV.
+Compute τ only if stable, otherwise return NaN vector.
 """
-function generate_u_list(S; cv_range=range(0.1, 1.0, length=5), rng=Random.default_rng())
+function safe_tau(t_vals, J; P=0.05)
+    λmax = maximum(real.(eigvals(J)))
+    if λmax ≥ 0
+        return fill(NaN, length(t_vals)), λmax, nothing
+    end
+    Rinf = -λmax
+    tP = -log(P)/Rinf
+    τ = t_vals ./ tP
+    return τ, λmax, tP
+end
+
+
+############################################################
+# 4. u-vector generator
+############################################################
+
+function generate_u_list(S; cv_range=range(0.1,1.0,length=5), rng=Random.default_rng())
     u_list = Vector{Vector{Float64}}()
     for cv in cv_range
         sigma = sqrt(log(1 + cv^2))
         mu = -sigma^2/2
-        push!(u_list, rand(rng, LogNormal(mu, sigma), S))
+        push!(u_list, rand(rng, LogNormal(mu,sigma), S))
     end
     return u_list
 end
 
 
-# ================================================================
-# 2. TROPHIC COHERENCE NETWORK GENERATION
-# ================================================================
-
-# ppm must exist externally
-# interaction_matrix must exist externally
-
-# We assume:
-#   ppm(S,B,L,T) -> A, s
-#   trophic_levels(A)
-#   trophic_incoherence(A,s)
-
-function build_ppm_network(S,B,L,T)
-    A, _ = ppm(S,B,L,T)
-    return A
-end
-
-
-# ================================================================
-# 5. INTERACTION MATRIX (same as before)
-# ================================================================
-
-function random_trophic_interaction_matrix(A; mag_abs=1.0, mag_cv=0.5, corr=1.0, rng=Random.default_rng())
-    S = size(A,1)
-    W = zeros(Float64, S, S)
-
-    sigma = sqrt(log(1 + mag_cv^2))
-    mu = log(mag_abs) - sigma^2/2
-
-    for i in 1:S, j in 1:S
-        if A[i,j] == 1
-            a = rand(rng, LogNormal(mu, sigma))
-            if corr == 1
-                b = a
-            elseif corr == 0
-                b = rand(rng, LogNormal(mu, sigma))
-            else
-                a2 = rand(rng, LogNormal(mu, sigma))
-                b = corr*a + (1-corr)*a2
-            end
-
-            W[j,i] =  a
-            W[i,j] = -b
-        end
-    end
-
-    return W
-end
-
-
-# ================================================================
-# 6. R-MED, STANDARDIZED TIME, INTERPOLATION
-# ================================================================
-
-# median_return_rate, compute_rmed_curve, standardized_time_axis
-# must be defined previously in your code.
-# We will assume they exist.
-
-function interpolate_curve(τ, r_vals, τ_common)
-    f = LinearInterpolation(τ, r_vals, extrapolation_bc=Line())
-    return f.(τ_common)
-end
-
-
-# ================================================================
-# 7. UNIFIED PIPELINE FUNCTION
-# ================================================================
-
-"""
-    run_unified_structural_pipeline!(S, B, L; u_list, q_vals, alpha_vals, m_vals)
-
-Runs all three structural experiments (coherence, degree, modularity)
-using the SAME u_list.
-"""
+############################################################
+# 5. UNIFIED STRUCTURAL PIPELINE (REAL FUNCTIONS)
+############################################################
 function run_unified_structural_pipeline!(
         S, B, L;
         u_list,
-        q_vals = range(0.01,1.5,length=9),
-        alpha_vals = range(0,2,length=9),
-        m_vals = range(0,1,length=9),
-        replicates = 20,
-        t_vals = 10 .^ range(log10(0.01), log10(100.0), length=40),
-        rng = Random.default_rng()
+        q_vals       = range(0.01, 1.5, length=9),
+        alpha_vals   = range(0, 2,   length=9),
+        m_vals       = range(0, 1,   length=9),
+        replicates   = 20,
+        t_vals       = 10 .^ range(log10(0.01), log10(100.0), length=40),
+        mag_abs      = 1.0,
+        mag_cv       = 0.5,
+        corr = 0.0,
+        rng          = Random.default_rng()
     )
 
+    ############################################################
+    # Output dictionaries
+    ############################################################
     results = Dict(
-        :coherence => Dict(),
-        :degree    => Dict(),
-        :modularity=> Dict(),
+        :coherence => Dict(),     # (u_index, q) => [curves...]
+        :degree    => Dict(),     # (u_index, α)
+        :modularity=> Dict(),     # (u_index, m)
     )
 
     τ_axes = Dict(
-        :coherence => Dict(),
-        :degree    => Dict(),
+        :coherence => Dict(),     # (u_index, q) => [τ vectors...]
+        :degree    => Dict(),     # per replicate
         :modularity=> Dict(),
     )
 
-    # For each u vector...
+    ############################################################
+    # Iterate over u vectors
+    ############################################################
     for (u_index, u) in enumerate(u_list)
 
-        # -----------------------------------------------------------
-        # TROPHIC COHERENCE
-        # -----------------------------------------------------------
+        ##################################################################
+        # 1. COHERENCE EXPERIMENT — PPMBuilder + build_interaction_matrix
+        ##################################################################
         for q in q_vals
-            curves = Vector{Vector{Float64}}()
+            curves = Vector{Vector{Float64}}()    # store rₘₑd(t)
+            taus   = Vector{Vector{Float64}}()    # store τ per replicate
+
             for rep in 1:replicates
-                A = build_ppm_network(S,B,L,q)
-                W = random_trophic_interaction_matrix(A; rng=rng)
-                J = jacobian(W,u)
-                push!(curves, compute_rmed_curve(J,u,t_vals))
+
+                # --- Build PPM ---
+                b = PPMBuilder()
+                set!(b; S=S, B=B, L=L, T=q, η=0.2)   # η is irrelevant for A
+                net = build(b)
+                A = net.A
+
+                # --- Interaction matrix ---
+                W = build_interaction_matrix(
+                        A;
+                        mag_abs      = mag_abs,
+                        mag_cv       = mag_cv,
+                        corr_aij_aji = corr,
+                        rng          = rng
+                    )
+
+                # --- Jacobian ---
+                J = jacobian(W, u)
+
+                # --- Stability + τ ---
+                τ, λmax, _ = safe_tau(t_vals, J)
+                if any(isnan, τ)
+                    continue  # drop unstable (Option B4)
+                end
+
+                # --- rₘₑd(t) ---
+                rcurve = compute_rmed_curve(J, u, t_vals)
+
+                push!(curves, rcurve)
+                push!(taus,   τ)
             end
-            # standardized τ
-            τ, _, _ = standardized_time_axis(t_vals, jacobian(random_trophic_interaction_matrix(build_ppm_network(S,B,L,first(q_vals));rng=rng),u))
-            results[:coherence][(u_index,q)] = curves
-            τ_axes[:coherence][(u_index,q)] = τ
+
+            results[:coherence][(u_index, q)] = curves
+            τ_axes[:coherence][(u_index, q)]  = taus
         end
 
-        # -----------------------------------------------------------
-        # DEGREE DISTRIBUTION
-        # -----------------------------------------------------------
+
+        ##################################################################
+        # 2. DEGREE HETEROGENEITY — degree_distribution_network
+        ##################################################################
         for α in alpha_vals
             curves = Vector{Vector{Float64}}()
+            taus   = Vector{Vector{Float64}}()
+
             for rep in 1:replicates
-                A = degree_distribution_network(S,L; alpha=α)
-                W = random_trophic_interaction_matrix(A)
-                J = jacobian(W,u)
-                push!(curves, compute_rmed_curve(J,u,t_vals))
+                # --- Network ---
+                A = degree_distribution_network(S, L; alpha=α, rng=rng)
+
+                W = random_trophic_interaction_matrix(
+                    A;
+                    mag_abs=mag_abs, mag_cv=mag_cv, corr=corr,
+                    rng=Random.default_rng()
+                )
+
+                # --- Interaction ---
+                # W = build_interaction_matrix(
+                #         A;
+                #         mag_abs      = mag_abs,
+                #         mag_cv       = mag_cv,
+                #         corr_aij_aji = corr,
+                #         rng          = rng
+                #     )
+
+                J = jacobian(W, u)
+
+                # --- τ ---
+                τ, λmax, _ = safe_tau(t_vals, J)
+                if any(isnan, τ)
+                    continue
+                end
+
+                # --- rₘₑd ---
+                rcurve = compute_rmed_curve(J, u, t_vals)
+
+                push!(curves, rcurve)
+                push!(taus,   τ)
             end
-            τ, _, _ = standardized_time_axis(t_vals, jacobian(random_trophic_interaction_matrix(degree_distribution_network(S,L;alpha=first(alpha_vals))),u))
-            results[:degree][(u_index,α)] = curves
-            τ_axes[:degree][(u_index,α)] = τ
+
+            results[:degree][(u_index, α)] = curves
+            τ_axes[:degree][(u_index, α)]  = taus
         end
 
-        # -----------------------------------------------------------
-        # MODULARITY
-        # -----------------------------------------------------------
+
+        ##################################################################
+        # 3. MODULARITY — modularity_network
+        ##################################################################
         for m in m_vals
             curves = Vector{Vector{Float64}}()
+            taus   = Vector{Vector{Float64}}()
+
             for rep in 1:replicates
-                A = modularity_network(S,L; m=m)
-                W = random_trophic_interaction_matrix(A)
-                J = jacobian(W,u)
-                push!(curves, compute_rmed_curve(J,u,t_vals))
+                # --- Network ---
+                A = modularity_network(S, L; m=m, rng=rng)
+
+                # --- Interaction ---
+                W = build_interaction_matrix(
+                        A;
+                        mag_abs      = mag_abs,
+                        mag_cv       = mag_cv,
+                        corr_aij_aji = corr,
+                        rng          = rng
+                    )
+
+                J = jacobian(W, u)
+
+                # --- τ ---
+                τ, λmax, _ = safe_tau(t_vals, J)
+                if any(isnan, τ)
+                    continue
+                end
+
+                # --- rₘₑd ---
+                rcurve = compute_rmed_curve(J, u, t_vals)
+
+                push!(curves, rcurve)
+                push!(taus,   τ)
             end
-            τ, _, _ = standardized_time_axis(t_vals, jacobian(random_trophic_interaction_matrix(modularity_network(S,L;m=first(m_vals))),u))
-            results[:modularity][(u_index,m)] = curves
-            τ_axes[:modularity][(u_index,m)] = τ
+
+            results[:modularity][(u_index, m)] = curves
+            τ_axes[:modularity][(u_index, m)]  = taus
         end
     end
 
-    return results, τ_axes, t_vals
+    params = (mag_abs=mag_abs, mag_cv=mag_cv, corr=corr)
+    return results, τ_axes, t_vals, params
 end
 
-
-# ================================================================
-# 8. UNIFIED PLOTTING FUNCTION
-# ================================================================
-
-"""
-    plot_results(results, τ_axes; mode=:coherence, u_index=1)
-
-Plots results for a given structural mode and u index.
-"""
-function plot_results(results, τ_axes, t_vals;
-        mode = :coherence,
-        u_index = 1,
-        figsize=(1600,1200),
-        t_or_tau = :tau
+############################################################
+# 6. PLOTTING — EMPTY PANEL IF ALL UNSTABLE (C1)
+############################################################
+############################################################
+# REFERENCE CURVE BUILDER — REAL NETWORKS, B4, C1
+############################################################
+function build_reference_rmed!(
+        p_ref, S, B, L, η, mode,
+        u, t_vals, params;
+        replicates_ref = 30,
+        rng = Random.default_rng()
     )
 
-    keys_mode = sort([k for k in keys(results[mode]) if k[1] == u_index])
+    mag_abs      = params.mag_abs
+    mag_cv       = params.mag_cv
+    corr_aij_aji = params.corr
+
+    ref_curves  = Vector{Vector{Float64}}()
+    τ_list      = Vector{Vector{Float64}}()
+
+    for rep in 1:replicates_ref
+
+        ####################################################
+        # Build network according to structural MODE
+        ####################################################
+        if mode == :coherence
+            # --- REAL PPM via PPMBuilder ---
+            b = PPMBuilder()
+            set!(b; S=S, B=B, L=L, T=p_ref, η=η)
+            net = build(b)
+            A   = net.A
+
+        elseif mode == :degree
+            # --- REAL degree distribution ---
+            A = degree_distribution_network(S, L; alpha=p_ref, rng=rng)
+
+        elseif mode == :modularity
+            # --- REAL modularity network ---
+            A = modularity_network(S, L; m=p_ref, rng=rng)
+
+        else
+            error("Unknown mode $mode")
+        end
+
+        ####################################################
+        # Interaction matrix
+        ####################################################
+        W = build_interaction_matrix(
+                A;
+                mag_abs      = mag_abs,
+                mag_cv       = mag_cv,
+                corr_aij_aji = corr_aij_aji,
+                rng          = rng
+            )
+
+        ####################################################
+        # Jacobian
+        ####################################################
+        J = jacobian(W, u)
+
+        ####################################################
+        # τ-axis — drop unstable
+        ####################################################
+        τ, λmax, _ = safe_tau(t_vals, J)
+        if any(isnan, τ)
+            continue
+        end
+
+        ####################################################
+        # rₘₑd(t)
+        ####################################################
+        rcurve = compute_rmed_curve(J, u, t_vals)
+
+        push!(ref_curves, rcurve)
+        push!(τ_list, τ)
+    end
+
+    # If ALL replicates unstable → panel becomes empty
+    if isempty(ref_curves)
+        return Vector{Vector{Float64}}(), Vector{Float64}()
+    end
+
+    # Use τ from the FIRST stable replicate
+    return ref_curves, τ_list[1]
+end
+
+############################################################
+# MAIN PLOT FUNCTION — WITH REFERENCE, τ OR t
+# Matches old behavior, works for ALL MODES
+############################################################
+function plot_results(
+        master_results, τ_axes, t_vals, params;
+        mode = :coherence,
+        u_index = 1,
+        reference = :lowest,
+        t_or_tau = :tau,                   
+        S=120, B=24, L=2142, η = 0.2,     
+        u,                                
+        replicates_ref = 30,
+        figsize = (1600, 1400),
+        rng = Random.default_rng()
+    )
+
+    ############################################################
+    # 0. Validate mode
+    ############################################################
+    if !haskey(master_results, mode)
+        error("Unknown mode=$mode. Must be :coherence, :degree, :modularity")
+    end
+
+    ############################################################
+    # 1. Extract parameters for this mode & u_index
+    ############################################################
+    all_keys = keys(master_results[mode])
+    keys_mode = sort([k for k in all_keys if k[1] == u_index])
+
+    if isempty(keys_mode)
+        @warn "No stable networks for mode=$mode and u_index=$u_index"
+        return Figure()
+    end
+
     param_vals = [k[2] for k in keys_mode]
 
-    fig = Figure(size=figsize)
+    ############################################################
+    # 2. Choose reference parameter
+    ############################################################
+    p_ref =
+        reference == :lowest  ? first(param_vals) :
+        reference == :highest ? last(param_vals)  :
+        error("reference must be :lowest or :highest")
+
+    println("\nReference for $mode = $p_ref\n")
+
+    ############################################################
+    # 3. Build reference curves using REAL NETWORK FUNCTIONS
+    ############################################################
+    ref_curves, τ_ref = build_reference_rmed!(
+        p_ref, S, B, L, η, mode,
+        u, t_vals, params;
+        replicates_ref = replicates_ref,
+        rng = rng
+    )
+
+    # If all unstable → reference is empty
+    τ_ref_plot = (t_or_tau == :tau ? τ_ref : t_vals)
+
+    ############################################################
+    # 4. FIGURE
+    ############################################################
+    fig = Figure(size = figsize)
     rows, cols = 3, 3
     idx = 1
 
     for p in param_vals
-        curves = results[mode][(u_index,p)]
-        if t_or_tau == :tau
-            τ    = τ_axes[mode][(u_index,p)]
+        curves_p = master_results[mode][(u_index, p)]
+        τ_list   = τ_axes[String(mode)][(u_index, p)]
+
+        r = div(idx-1, cols) + 1
+        c = mod(idx-1, cols) + 1
+
+        xlabel = t_or_tau == :tau ? "τ" : "t"
+        ylabel = "rₘₑd(" * (t_or_tau == :tau ? "τ" : "t") * ")"
+
+        ax = Axis(fig[r, c];
+            title  = "$mode = $(round(p,digits=3))",
+            xlabel = xlabel,
+            ylabel = ylabel,
+            xscale = (t_or_tau == :t ? log10 : identity)
+        )
+
+        ############################################################
+        # 5. Draw REFERENCE (RED) if available
+        ############################################################
+        if !isempty(ref_curves)
+            for curve in ref_curves
+                lines!(ax, τ_ref_plot, curve; color = (:red, 0.35))
+            end
+        end
+
+        ############################################################
+        # 6. Draw CURVES for this parameter (BLACK)
+        ############################################################
+        if !isempty(curves_p)
+            for (curve, τ_raw) in zip(curves_p, τ_list)
+                τ_plot = t_or_tau == :tau ? τ_raw : t_vals
+                lines!(ax, τ_plot, curve; color = (:black, 0.25))
+            end
+
+            # τ axis limits only in τ-mode
+            if t_or_tau == :tau
+                xlims!(ax, -0.1, 1.1)
+            end
         else
-            τ    = t_vals
-        end
-
-        r = div(idx-1, cols)+1
-        c = mod(idx-1, cols)+1
-
-        if t_or_tau == :tau
-            ax = Axis(fig[r,c];
-                title="$(mode) = $(round(p,digits=3))",
-                xlabel="τ", ylabel="rₘₑd(τ)"
-            )
-        else
-            ax = Axis(fig[r,c];
-                title="$(mode) = $(round(p,digits=3))",
-                xlabel="t", ylabel="rₘₑd(t)",
-                xscale=log10
-            )
-        end
-
-        for curve in curves
-            lines!(ax, τ, curve; color=(:black,0.25))
-        end
-        if t_or_tau == :tau
-            xlims!(ax, -0.01, 1.1)
+            # Empty panel (C1 behavior): do nothing
+            @warn "All replicates unstable for p=$p (mode=$mode, u_index=$u_index)"
         end
 
         idx += 1
     end
 
     display(fig)
+    return fig
 end
 
-using Random
 
-# --- community parameters ---
-S = 120                      # species
-B = 24                       # for PPM (only coherence pipeline uses this)
+############################################################
+# 7. Example driver code
+############################################################
+S = 120
+B = 24
 connectance = 0.15
-L = round(Int, connectance * S * (S - 1))
+L = round(Int, connectance * S * (S-1))
 
-# --- structural parameter values ---
-q_vals = range(0.01, 1.5; length=9)
-alpha_vals = range(0, 2; length=9)
-m_vals = range(0, 1; length=9)
+q_vals = range(0.01,1.5,length=9)
+alpha_vals = range(0.01,1.5,length=9)
+m_vals = range(0.01,1.5,length=9)
 
-# --- u heterogeneity range ---
-u_CVs = range(0.1, 2.0; length=10)   # 5 u-vectors from homogeneous → heterogeneous
-
-# --- other settings ---
-replicates = 20
+u_CVs = range(0.1,2.0,length=10)
 rng = Random.default_rng()
 
 u_list = generate_u_list(S; cv_range=u_CVs, rng=rng)
 
-results, τ_axes, t_vals = run_unified_structural_pipeline!(
-    S, B, L;
-    u_list = u_list,
-    q_vals = q_vals,
-    alpha_vals = alpha_vals,
-    m_vals = m_vals,
-    replicates = replicates,
-    rng = rng
+master_results, τ_axes, t_vals, params = run_unified_structural_pipeline!(
+    S,B,L;
+    u_list=u_list,
+    q_vals=q_vals,
+    alpha_vals=alpha_vals,
+    m_vals=m_vals,
+    mag_abs=0.5,
+    mag_cv=0.5,
+    corr=0.0,
+    rng=rng
 )
 
 for i in 1:10
-    plot_results(results, τ_axes, t_vals; mode=:coherence, u_index=i, t_or_tau = :tau)
-    plot_results(results, τ_axes, t_vals; mode=:coherence, u_index=i, t_or_tau = :t)
-end
-for i in 1:10
-    plot_results(results, τ_axes, t_vals; mode=:degree, u_index=i, t_or_tau = :tau)
-end
-for i in 1:10
-    plot_results(results, τ_axes, t_vals; mode=:modularity, u_index=i, t_or_tau = :tau)
+    u = u_list[i]
+    plot_results(
+        master_results, τ_axes, t_vals, params;
+        mode=:coherence,
+        u_index=3,
+        reference=:lowest,
+        t_or_tau=:tau,
+        S=S, B=B, L=L, u=u
+    )
 end
 
 """
-    compute_delta_rmed(results, τ_axes, t_vals; mode=:coherence, u_index=1, t_or_tau=:tau)
+    compute_delta_rmed(master_results, τ_axes, t_vals; mode=:coherence, u_index=1, t_or_tau=:tau)
 
 Returns a dictionary mapping structural parameter → Δ-rₘₑd curve
 for the given u_index.
@@ -289,20 +488,20 @@ for the given u_index.
 Δ is computed as the absolute difference between the mean curve
 and the reference mean curve (lowest param value).
 """
-function compute_delta_rmed(results, τ_axes, t_vals;
+function compute_delta_rmed(master_results, τ_axes, t_vals;
         mode = :coherence,
         u_index = 1,
         t_or_tau = :tau
     )
 
     # Extract all parameter values for this mode and u
-    keys_mode = sort([k for k in keys(results[mode]) if k[1] == u_index])
+    keys_mode = sort([k for k in keys(master_results[mode]) if k[1] == u_index])
     param_vals = [k[2] for k in keys_mode]
 
     ref_param = param_vals[1]  # lowest = reference
 
     # Compute reference mean curve
-    ref_curves = results[mode][(u_index, ref_param)]
+    ref_curves = master_results[mode][(u_index, ref_param)]
     ref_mean = mean(reduce(hcat, ref_curves), dims=2)[:]
 
     if t_or_tau == :tau
@@ -315,7 +514,7 @@ function compute_delta_rmed(results, τ_axes, t_vals;
     deltas = Dict{Float64, Vector{Float64}}()
 
     for p in param_vals
-        curves = results[mode][(u_index, p)]
+        curves = master_results[mode][(u_index, p)]
         mean_curve_p = mean(reduce(hcat, curves), dims=2)[:]
 
         if t_or_tau == :tau
@@ -336,7 +535,7 @@ function compute_delta_rmed(results, τ_axes, t_vals;
     return deltas, τ_ref
 end
 
-function plot_delta_rmed(results, τ_axes, t_vals;
+function plot_delta_rmed(master_results, τ_axes, t_vals;
         mode = :coherence,
         u_index = 1,
         figsize=(1600,1200),
@@ -344,7 +543,7 @@ function plot_delta_rmed(results, τ_axes, t_vals;
     )
 
     # Compute Δ curves (dictionary p → Δ_p)
-    deltas, τ = compute_delta_rmed(results, τ_axes, t_vals;
+    deltas, τ = compute_delta_rmed(master_results, τ_axes, t_vals;
                                    mode=mode, u_index=u_index, t_or_tau=t_or_tau)
 
     param_vals = sort(collect(keys(deltas)))
@@ -407,22 +606,22 @@ function plot_delta_rmed(results, τ_axes, t_vals;
 end
 
 """
-    plot_delta_rmed_all_u(results, τ_axes, t_vals;
+    plot_delta_rmed_all_u(master_results, τ_axes, t_vals;
         mode=:coherence, t_or_tau=:tau)
 
 Computes mean Δ-rₘₑd across all u’s and plots them in a 3×3 grid.
 """
-function plot_delta_rmed_all_u(results, τ_axes, t_vals;
+function plot_delta_rmed_all_u(master_results, τ_axes, t_vals;
         mode = :coherence,
         t_or_tau = :tau,
         figsize=(1600,1200)
     )
 
     # Extract all u indices
-    u_indices = sort(unique(k[1] for k in keys(results[mode])))
+    u_indices = sort(unique(k[1] for k in keys(master_results[mode])))
 
     # Extract parameter values (same for all u)
-    param_vals = sort(unique(k[2] for k in keys(results[mode])))
+    param_vals = sort(unique(k[2] for k in keys(master_results[mode])))
 
     # param → collection of Δ curves across u
     Δ_per_param = Dict(p => Vector{Vector{Float64}}() for p in param_vals)
@@ -431,7 +630,7 @@ function plot_delta_rmed_all_u(results, τ_axes, t_vals;
     # Compute deltas for each u and store
     # ---------------------------------------------
     for u_index in u_indices
-        deltas, τ = compute_delta_rmed(results, τ_axes, t_vals;
+        deltas, τ = compute_delta_rmed(master_results, τ_axes, t_vals;
                         mode=mode, u_index=u_index, t_or_tau=t_or_tau)
 
         for p in param_vals
@@ -497,7 +696,7 @@ function plot_delta_rmed_all_u(results, τ_axes, t_vals;
     display(fig)
 end
 
-plot_delta_rmed(results, τ_axes, t_vals; mode=:coherence, u_index=5, t_or_tau=:tau)
-plot_delta_rmed_all_u(results, τ_axes, t_vals; mode=:coherence, t_or_tau=:t)
+plot_delta_rmed(master_results, τ_axes, t_vals; mode=:coherence, u_index=5, t_or_tau=:tau)
+plot_delta_rmed_all_u(master_results, τ_axes, t_vals; mode=:coherence, t_or_tau=:t)
 
-deltas, τ = compute_delta_rmed(results, τ_axes, t_vals; mode=:modularity, u_index=3)
+deltas, τ = compute_delta_rmed(master_results, τ_axes, t_vals; mode=:modularity, u_index=3)
