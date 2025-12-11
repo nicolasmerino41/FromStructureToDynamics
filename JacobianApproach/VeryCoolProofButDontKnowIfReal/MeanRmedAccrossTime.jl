@@ -44,11 +44,13 @@ plot_rmed_mean_grid(results, t_vals)
 
 function plot_rmed_mean_grid_with_reference(results, t_vals;
         q_targets = sort(collect(keys(results))),
-        q_ref = 0.0,
+        # q_ref = 0.0,
         figsize = (1100,720),
         title = ""
     )
 
+    kis = keys(results)
+    q_ref = minimum(kis)
     # Compute reference mean curve
     ref_mean = mean_curve(results[q_ref])
 
