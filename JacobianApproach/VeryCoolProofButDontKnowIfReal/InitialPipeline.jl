@@ -109,12 +109,14 @@ end
 
 function plot_rmed_grid_with_reference(results, t_vals;
         q_targets = sort(collect(keys(results))),
-        q_ref = 0.01,
+        # q_ref = 0.784587,
         figsize = (1100,720),
         title = ""
     )
 
     # reference curves (30 curves)
+    kis = keys(results)
+    q_ref = minimum(kis)
     ref_curves = results[q_ref]
 
     fig = Figure(size=figsize)
@@ -163,9 +165,9 @@ results, t_vals = run_pipeline_rmed!(
     rng = Random.default_rng()
 )
 
-plot_rmed_grid_with_reference(results, t_vals; title="MODULARITY")
-plot_rmed_mean_grid_with_reference(results, t_vals, title = "DEGREE DISTRIBUTION")
-plot_rmed_delta_grid(results, t_vals; title = "MODULARITY")
+plot_rmed_grid_with_reference(results, t_vals; title="SIMPLE TROPHIC COEHERENCE simpler network")
+plot_rmed_mean_grid_with_reference(results, t_vals, title = "SIMPLE TROPHIC COEHERENCE simpler network")
+plot_rmed_delta_grid(results, t_vals; title = "SIMPLE TROPHIC COEHERENCE simpler network")
 
 for u in [0.5, 2.0], mag_abs in [0.3, 1.0], corr in [0.0, 0.99]
     results, t_vals = run_pipeline_rmed!(
