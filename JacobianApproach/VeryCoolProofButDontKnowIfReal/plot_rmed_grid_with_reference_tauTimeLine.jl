@@ -57,7 +57,7 @@ function plot_rmed_grid_with_reference_tauTimeLine(
     display(fig)
 end
 
-plot_rmed_grid_with_reference_tauTimeLine(results, τ_axes, t_vals; title = "MODULARITY")
+plot_rmed_grid_with_reference_tauTimeLine(results, τ_axes, t_vals; title = "Simple Trophic Coherence")
 function plot_rmed_grid_with_reference_t95(
     results, τ_axes, t_vals;
     q_targets = sort(collect(keys(results))),
