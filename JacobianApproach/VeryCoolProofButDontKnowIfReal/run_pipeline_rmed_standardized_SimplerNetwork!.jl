@@ -1,0 +1,461 @@
+using Interpolations
+trophic_coherence = trophic_incoherence
+# --- Asymptotic resilience: R∞ = -Re(λ_dom) ---
+function asymptotic_resilience(J)
+    λmax = maximum(real.(eigvals(J)))
+    return -λmax
+end
+
+# --- Standardised recovery time τ(t) = t / tP ---
+function standardized_time_axis(t_vals, J; P = 0.05)
+    Rinf = asymptotic_resilience(J)
+    # @assert Rinf > 0 "System not asymptotically stable (R∞ ≤ 0)."
+
+    tP = -log(P) / Rinf        # time to reach P fraction of displacement
+    τ = t_vals ./ tP
+    return τ, tP, Rinf
+end
+
+function compute_rmed_curve(J, u, t_vals)
+    r = similar(t_vals)
+    for i in eachindex(t_vals)
+        r[i] = median_return_rate(J, u; t=t_vals[i], perturbation=:biomass)
+    end
+    return r
+end
+
+mean_curve(curves) = [mean(c[i] for c in curves) for i in 1:length(curves)]
+delta_curve(mean_q, mean_ref) = abs.(mean_q .- mean_ref)
+
+############################################################
+# 0. Simple random network builder (new)
+############################################################
+
+"""
+    build_random_network(S; C=0.1, rng=Random.default_rng())
+
+Build a simple directed acyclic network on S species with
+approximate connectance C (probability of a link i → j for i<j).
+"""
+function build_random_network(S; C=0.1, rng=Random.default_rng())
+    A = zeros(Float64, S, S)
+    for i in 1:S-1
+        for j in i+1:S
+            if rand(rng) < C
+                A[i, j] = 1.0   # link i → j
+            end
+        end
+    end
+    return A
+end
+
+############################################################
+# 1. Compute D(t) = || exp(J t) u ||
+############################################################
+function compute_distance_curve(J, u, t_vals)
+    D = similar(t_vals)
+    for (i, t) in enumerate(t_vals)
+        x_t = exp(J * t) * u        # state after time t
+        D[i] = norm(x_t)            # distance to equilibrium
+    end
+    return D
+end
+
+############################################################
+# 2. Compute t95: time when D(t)/D(0) <= 0.05
+############################################################
+function compute_t95(D, t_vals; threshold = 0.05)
+    D0 = D[1]
+    ratio = D ./ D0
+    idx = findfirst(ratio .<= threshold)
+    return isnothing(idx) ? Inf : t_vals[idx]
+end
+
+############################################################
+# 3. Compute τ-axis = t_vals / t95
+############################################################
+function compute_tau_axis(t_vals, t95)
+    if isinf(t95)
+        return fill(NaN, length(t_vals))
+    else
+        return t_vals ./ t95
+    end
+end
+
+############################################################
+# 4. --- MAIN PIPELINE USING ARNOLDI CORRECT t95 DEFINITION ---
+#     Networks built randomly, q measured post hoc & binned
+############################################################
+function run_pipeline_rmed_standardized_SimplerNetwork!(
+        B, S, L;
+        q_targets = range(0.01, 1.5, length=9),  # now just sets number of bins
+        replicates = 30,
+        mag_abs = 1.0,
+        mag_cv = 0.5,
+        corr = 0.0,
+        u_cv = 0.5,
+        t_vals = 10 .^ range(log10(0.01), log10(100.0), length=60),
+        u,
+        connectance = 0.1,                       # NEW: fixed connectance
+        rng = Random.default_rng()
+    )
+
+    # These dicts remain as before
+    results   = Dict{Float64, Vector{Vector{Float64}}}()   # rmed curves
+    Js        = Dict{Float64, Matrix{Float64}}()           # one Jacobian per bin
+    τ_axes    = Dict{Float64, Vector{Float64}}()           # tau axes (method 2)
+    t95_vals  = Dict{Float64, Float64}()                   # store t95 per bin
+
+    # ------------------------------------------------------
+    # Step 1: build a bunch of random networks & measure q
+    # ------------------------------------------------------
+    n_bins        = length(q_targets)
+    n_networks    = n_bins * replicates
+
+    As = Vector{Matrix{Float64}}(undef, n_networks)
+    Qs = Vector{Float64}(undef, n_networks)
+
+    for k in 1:n_networks
+        A = build_random_network(S; C=connectance, rng=rng)
+        # assumes you have a trophic coherence function defined already:
+        #    q = trophic_coherence(A)
+        A_binary = Int.(A .> 0)
+        s = trophic_levels(A_binary)
+        q = trophic_coherence(A_binary, s)
+        As[k] = A
+        Qs[k] = q
+    end
+
+    q_min = minimum(Qs)
+    q_max = maximum(Qs)
+
+    # Bin edges across observed range [q_min, q_max]
+    edges = collect(range(q_min, q_max; length = n_bins + 1))
+    # bin labels = lowest value of each bin (as requested)
+    q_bins = edges[1:end-1]  # length n_bins
+
+    # Assign each network to a bin index
+    bin_index = Vector{Int}(undef, n_networks)
+    for k in 1:n_networks
+        q = Qs[k]
+        # first index in edges such that edges[idx] >= q
+        idx = searchsortedfirst(edges, q)
+        if idx <= 1
+            bin_index[k] = 1
+        elseif idx > length(edges)
+            bin_index[k] = n_bins
+        else
+            bin_index[k] = idx - 1
+        end
+    end
+
+    # ------------------------------------------------------
+    # Step 2: for each bin, build W, J, rmed curves, τ, t95
+    # ------------------------------------------------------
+    for b in 1:n_bins
+        q_label = q_bins[b]                # this is the "q" key: lowest value in bin
+        curves_q = Vector{Vector{Float64}}()
+
+        # collect all networks in this bin
+        first_J_for_bin = nothing
+
+        for k in 1:n_networks
+            if bin_index[k] != b
+                continue
+            end
+
+            A = As[k]
+
+            # Interaction matrix (unchanged)
+            W = build_interaction_matrix(A;
+                mag_abs = mag_abs,
+                mag_cv  = mag_cv,
+                corr_aij_aji = corr,
+                rng = rng
+            )
+
+            # Jacobian
+            J = jacobian(W, u)
+
+            if first_J_for_bin === nothing
+                first_J_for_bin = J
+                Js[q_label] = J     # store a representative Jacobian for this bin
+            end
+
+            # rmed curve (unchanged)
+            push!(curves_q, compute_rmed_curve(J, u, t_vals))
+        end
+
+        if first_J_for_bin === nothing || isempty(curves_q)
+            println("Warning: no networks fell into bin $b (q ≈ $q_label). Skipping this bin.")
+            continue
+        end
+
+        # Compute distance curve D(t) from representative J for this bin
+        D_curve = compute_distance_curve(first_J_for_bin, u, t_vals)
+
+        # Compute t95 (first time D(t)/D(0) <= 0.05)
+        t95 = compute_t95(D_curve, t_vals)
+        t95_vals[q_label] = t95
+
+        # τ-axis (if system never reaches 5%, τ = NaN)
+        τ_axes[q_label] = compute_tau_axis(t_vals, t95)
+
+        results[q_label] = curves_q
+
+        println("Finished q-bin with label q = $q_label   (t95 = $t95)")
+    end
+
+    params = (mag_abs = mag_abs, mag_cv = mag_cv, corr = corr, connectance = connectance)
+    return results, τ_axes, Js, t_vals, t95_vals, params
+end
+
+function plot_rmed_grid_with_reference_tau(
+        results, τ_axes, params;
+        q_targets = sort(collect(keys(results))),
+        reference = :lowest,
+        S, B, L, η, u, t_vals,
+        replicates_ref = 30,
+        figsize = (1600,1400)
+    )
+
+    q_ref = (reference == :lowest)  ? first(q_targets) :
+            (reference == :highest) ? last(q_targets)  :
+            error("reference must be :lowest or :highest")
+
+    # rebuild reference replicates
+    ref_curves, τ_ref = build_reference_rmed!(
+        q_ref, S, B, L, η, u, t_vals, params;
+        replicates_ref = replicates_ref
+    )
+
+    # transform τ → log10(1+τ)
+    # τ_ref_plot = tau_to_logtau(τ_ref)
+    τ_ref_plot = τ_ref
+
+    fig = Figure(size = figsize)
+    rows, cols = 3, 3
+    idx = 1
+
+    for q in q_targets
+        curves = results[q]
+        τ_vals    = τ_axes[q]
+        # τ_plot    = tau_to_logtau(τ_vals)
+        τ_plot    = τ_vals
+
+        r = div(idx-1, cols) + 1
+        c = mod(idx-1, cols) + 1
+
+        ax = Axis(fig[r,c];
+            title="q=$(round(q, digits=3))",
+            xlabel="τ",
+            ylabel="rₘₑd(τ)")
+
+        # reference curves (red)
+        for curve in ref_curves
+            lines!(ax, τ_ref_plot, curve; color=(:red, 0.35))
+        end
+
+        # curves for this q (black)
+        for curve in curves
+            lines!(ax, τ_plot, curve; color=(:black, 0.25))
+        end
+
+        xlims!(ax, (-0.1, 1.1))
+
+        idx += 1
+    end
+
+    display(fig)
+end
+
+function plot_rmed_mean_grid_with_reference_tau(
+        results, τ_axes, params;
+        q_targets = sort(collect(keys(results))),
+        reference = :lowest,
+        S, B, L, η, u, t_vals,
+        replicates_ref = 30,
+        figsize = (1600,1400)
+    )
+
+    q_ref = (reference == :lowest)  ? first(q_targets) :
+            (reference == :highest) ? last(q_targets)  :
+            error("reference must be :lowest or :highest")
+
+    ref_curves, τ_ref = build_reference_rmed!(
+        q_ref, S, B, L, η, u, t_vals, params;
+        replicates_ref = replicates_ref
+    )
+
+    ref_mean = mean_curve(ref_curves)
+    # τ_ref_plot = tau_to_logtau(τ_ref)
+    τ_ref_plot = τ_ref
+
+    fig = Figure(size = figsize)
+    rows, cols = 3, 3
+    idx = 1
+
+    for q in q_targets
+        curves = results[q]
+        mean_q = mean_curve(curves)
+
+        τ_vals     = τ_axes[q]
+        # τ_plot     = tau_to_logtau(τ_vals)
+        τ_plot     = τ_vals
+
+        r = div(idx-1, cols) + 1
+        c = mod(idx-1, cols) + 1
+
+        ax = Axis(fig[r,c];
+            title="q=$(round(q,digits=3))",
+            xlabel="τ",
+            ylabel="mean rₘₑd(τ)"
+        )
+
+        lines!(ax, τ_ref_plot, ref_mean; color=:red, linewidth=3)
+        lines!(ax, τ_plot, mean_q;    color=:black, linewidth=3)
+        xlims!(ax, (-0.1, 1.1))
+
+        idx += 1
+    end
+
+    display(fig)
+end
+
+function plot_rmed_delta_grid_tau(
+        results, τ_axes, params;
+        q_vals=sort(collect(keys(results))),
+        reference = :lowest,
+        S::Int, B::Int, L::Int, η,
+        u, t_vals,
+        replicates_ref = 30,
+        figsize = (1600,1400),
+        rng = Random.default_rng()
+    )
+
+    # --- choose reference q ---
+    q_ref = reference == :lowest  ? minimum(q_vals) :
+            reference == :highest ? maximum(q_vals) :
+            error("reference must be :lowest or :highest")
+
+    # --- build fresh reference curves ---
+    ref_curves, τ_ref = build_reference_rmed!(
+        q_ref, S, B, L, η, u, t_vals, params;
+        replicates_ref=replicates_ref,
+        rng=rng
+    )
+    ref_mean = mean_curve(ref_curves)
+
+    # --- Build a common τ-grid ---
+    τ_max = maximum(vcat([maximum(τ_axes[q]) for q in q_vals]...))
+    τ_common = range(0, τ_max; length=200)
+
+    # --- Interpolate reference onto τ_common ---
+    f_ref = LinearInterpolation(τ_ref, ref_mean, extrapolation_bc=Line())
+    ref_common = f_ref.(τ_common)
+
+    # --- compute global y-limits for Δ ---
+    all_deltas = Float64[]
+    for q in q_vals
+        mean_q = mean_curve(results[q])
+        τ_q    = τ_axes[q]
+
+        f_q = LinearInterpolation(τ_q, mean_q, extrapolation_bc=Line())
+        Δ_common = abs.(f_q.(τ_common) .- ref_common)
+
+        append!(all_deltas, Δ_common)
+    end
+
+    y_min = minimum(all_deltas)
+    y_max = maximum(all_deltas)
+    pad   = 0.1 * abs(y_max)
+    ylims = (y_min - pad, y_max + pad)
+
+    # --- plotting ---
+    fig = Figure(size=figsize)
+    rows, cols = 3, 3
+    idx = 1
+
+    for q in q_vals
+        mean_q = mean_curve(results[q])
+        τ_q    = τ_axes[q]
+
+        f_q = LinearInterpolation(τ_q, mean_q, extrapolation_bc=Line())
+        Δ_common = abs.(f_q.(τ_common) .- ref_common)
+
+        r = div(idx-1, cols) + 1
+        c = mod(idx-1, cols) + 1
+
+        ax = Axis(fig[r,c];
+            title="q = $(round(q,digits=3))",
+            xlabel="τ",
+            ylabel="|Δ rₘₑd(τ)|"
+        )
+
+        lines!(ax, τ_common, Δ_common; color=:blue, linewidth=3)
+        ylims!(ax, ylims...)  # apply global y limits
+        xlims!(ax, (-0.1, 1.1))
+
+        idx += 1
+    end
+
+    display(fig)
+end
+
+function build_reference_rmed!(
+        q_ref, S, B, L, η, u, t_vals, params;
+        replicates_ref = 30,
+        rng = Random.default_rng()
+    )
+
+    curves = Vector{Vector{Float64}}()
+    mag_abs = params.mag_abs
+    mag_cv  = params.mag_cv
+    corr    = params.corr
+    C       = hasproperty(params, :connectance) ? params.connectance : 0.1
+
+    Jref = nothing
+
+    for rep in 1:replicates_ref
+        # NEW: build random network instead of PPM
+        A = build_random_network(S; C=C, rng=rng)
+
+        # Interaction matrix
+        W = build_interaction_matrix(A;
+            mag_abs=mag_abs,
+            mag_cv=mag_cv,
+            corr_aij_aji=corr,
+            rng=rng
+        )
+
+        J = jacobian(W, u)
+        if Jref === nothing
+            Jref = J
+        end
+
+        rcurve = compute_rmed_curve(J, u, t_vals)
+        push!(curves, rcurve)
+    end
+
+    # compute standardized τ-axis using the *first* reference J
+    τ_ref, _, _ = standardized_time_axis(t_vals, Jref)
+
+    return curves, τ_ref
+end
+
+# transform tau → tau_plot = log10(1 + tau)
+tau_to_logtau(tau) = log10.(1 .+ tau)
+
+S, B, L = 120, 24, 2142
+u = random_u(S, mean=1.0, cv=0.5)
+results, τ_axes, Js, t_vals, t95_vals, params = run_pipeline_rmed_standardized_SimplerNetwork!(
+    B, S, L;
+    mag_abs = 0.5,
+    mag_cv = 0.5,
+    corr = 0.0,
+    u_cv = 2.0,
+    t_vals = 10 .^ range(log10(0.01), log10(100.0), length=30),
+    u = u,
+    connectance = 0.1,
+    rng = Random.default_rng()
+);
