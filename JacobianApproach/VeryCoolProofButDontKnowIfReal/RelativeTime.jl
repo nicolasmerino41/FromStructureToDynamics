@@ -371,7 +371,7 @@ tau_to_logtau(tau) = log10.(1 .+ tau)
 
 S, B, L = 120, 24, 2142
 u = random_u(S, mean=1.0, cv=0.5)
-results, τ_axes, Js, t_vals, params = run_pipeline_rmed_standardized!(
+results, τ_axes, Js, t_vals, t95_vals, params = run_pipeline_rmed_standardized!(
     B, S, L;
     mag_abs = 0.5,
     mag_cv = 0.5,
