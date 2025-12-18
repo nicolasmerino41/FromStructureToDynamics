@@ -62,9 +62,24 @@ end
 ############################################################
 # 4. --- MAIN PIPELINE USING ARNOLDI CORRECT t95 DEFINITION ---
 ############################################################
+# Implicit t95 from an rmed(t) curve: exp(-rmed(t)*t) = 0.05
+function t95_from_rmed_curve(t_vals::AbstractVector, rmed::AbstractVector; target::Real=0.05)
+    @assert length(t_vals) == length(rmed)
+    y = @. exp(-rmed * t_vals)                 # predicted remaining fraction
+    idx = findfirst(y .<= target)
+    isnothing(idx) && return Inf
+    idx == 1 && return float(t_vals[1])
+
+    # linear interpolation between grid points
+    t1, t2 = float(t_vals[idx-1]), float(t_vals[idx])
+    y1, y2 = float(y[idx-1]), float(y[idx])
+    y2 == y1 && return t2
+    return t1 + (target - y1) * (t2 - t1) / (y2 - y1)
+end
 
 function run_pipeline_rmed_standardized!(
         B, S, L;
+        # q_targets = 10 .^ range(log10(0.01), log10(10.0), length=9),
         q_targets = range(0.01, 1.5, length=9),
         replicates = 30,
         mag_abs = 1.0,
@@ -87,14 +102,19 @@ function run_pipeline_rmed_standardized!(
         # -------------------------------
         # Build interaction + Jacobian
         # -------------------------------
+        @info "Target q = $q"
+        avg_q_vec = Float64[]
         for rep in 1:replicates
 
             # Build PPM
             b = PPMBuilder()
-            set!(b; S=S, B=B, L=L, T=q, η=0.2)
+            # set!(b; S=S, B=B, L=L, T=q, η=0.0)
+            set!(b; S=120, B=24, L=2142, T=q)
             net = build(b)
             A = net.A
-
+            realized_q = net.q
+            # @info "q = $q"
+            push!(avg_q_vec, realized_q)
             # Interaction matrix
             W = build_interaction_matrix(A;
                 mag_abs=mag_abs,
@@ -111,14 +131,20 @@ function run_pipeline_rmed_standardized!(
             push!(curves_q, compute_rmed_curve(J, u, t_vals))
         end
 
-        # ----------------------------------------------------------
-        # Compute CORRECT D(t) curve from Arnoldi
-        # ----------------------------------------------------------
-        J = Js[q]
-        D_curve = compute_distance_curve(J, u, t_vals)
+        avg_q = mean(avg_q_vec)
+        @info "Average q = $avg_q"
 
-        # Compute t95 (first time D(t)/D(0) <= 0.05)
-        t95 = compute_t95(D_curve, t_vals)
+        # ----------------------------------------------------------
+        # Compute t95 using Arnoldi/rmed implicit definition:
+        # exp(-Ravg(t)*t) = 0.05  with Ravg(t) ≈ rmed(t)
+        # ----------------------------------------------------------
+        t95 = begin
+            vals = [t95_from_rmed_curve(t_vals, c) for c in curves_q]
+            finite_vals = filter(isfinite, vals)
+            isempty(finite_vals) ? Inf : median(finite_vals)
+            # if you want your old “most conservative” behavior, use:
+            # isempty(finite_vals) ? Inf : minimum(finite_vals)
+        end
         t95_vals[q] = t95
 
         # τ-axis (if system never reaches 5%, τ = NaN)
@@ -126,7 +152,7 @@ function run_pipeline_rmed_standardized!(
 
         results[q] = curves_q
 
-        println("Finished q = $q   (t95 = $t95)")
+        # println("Finished q = $q   (t95 = $t95)")
     end
 
     params = (mag_abs=mag_abs, mag_cv=mag_cv, corr=corr)
@@ -359,17 +385,17 @@ function build_reference_rmed!(
         push!(curves, rcurve)
     end
 
-    # compute standardized τ-axis using the *first* reference J
-    Jref = jacobian(build(b).W, u)
-    τ_ref, _, _ = standardized_time_axis(t_vals, Jref)
+    # # compute standardized τ-axis using the *first* reference J
+    # Jref = jacobian(build(b).W, u)
+    # τ_ref, _, _ = standardized_time_axis(t_vals, Jref)
 
-    return curves, τ_ref
+    return curves
 end
 
 # transform tau → tau_plot = log10(1 + tau)
 tau_to_logtau(tau) = log10.(1 .+ tau)
 
-S, B, L = 120, 24, 2142
+S, B, L = 120, 24, 2142 
 u = random_u(S, mean=1.0, cv=0.5)
 results, τ_axes, Js, t_vals, t95_vals, params = run_pipeline_rmed_standardized!(
     B, S, L;
@@ -381,6 +407,24 @@ results, τ_axes, Js, t_vals, t95_vals, params = run_pipeline_rmed_standardized!
     u = u,
     rng = Random.default_rng()
 );
+
+plot_rmed_grid_with_reference(
+    results, t_vals, params; 
+    title="TROPHIC COEHERENCE",
+    q_targets = sort(collect(keys(results))),
+    reference = :lowest,                 # :lowest, :highest, or numeric q
+    S=S, B=B, L=L, u=u,
+    η=0.2
+)
+
+plot_rmed_delta_grid(
+    results, t_vals, params;
+    q_targets = sort(collect(keys(results))),
+    reference = :lowest,
+    S, B, L, η=0.2, u,
+    title = "TROPHIC COEHERENCE",
+    rng = Random.default_rng()
+)
 
 plot_rmed_grid_with_reference_tau(results, τ_axes, params;
     reference = :lowest,
