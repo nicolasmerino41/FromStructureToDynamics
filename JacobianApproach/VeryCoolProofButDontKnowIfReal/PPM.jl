@@ -136,7 +136,7 @@ Construct the adjacency matrix, interaction matrix, trophic levels, and q.
 function build(b::PPMBuilder)
     @assert b.S > 0 && b.B > 0 && b.L > 0 && b.T > 0 "Incomplete builder fields"
 
-    A, s = ppm(b.S, b.B, b.L, b.T)
+    A, s = ppm(b.S, b.B, b.L, b.T;)
     s = trophic_levels(A)
     q = trophic_incoherence(A, s)
     W = build_interaction_matrix(
@@ -149,8 +149,20 @@ function build(b::PPMBuilder)
     return (A=A, s=s, q=q, W=W)
 end
 
-b = PPMBuilder()
-set!(b; S=120, B=24, L=2142, T=1.5)
+for q in q_targets
+    avg_q_vec = Float64[]
+    for i in 1:10
+        b = PPMBuilder()
+        set!(b; S=120, B=24, L=2142, T=q)
+        net = build(b)
+        q = net.q
+        push!(avg_q_vec, q)
+    end
+
+    avg_q = mean(avg_q_vec)
+    println("q target= ", q)
+    println("Average q = ", avg_q)
+end
 
 result = build(b)
 
@@ -287,3 +299,48 @@ function visualize_escalator(A, s; B, xnoise=0.75, figres=(1100,620))
 end
 
 visualize_escalator(A, s; B=b.B)
+
+# General trophic levels
+using LinearAlgebra
+
+function general_trophic_levels(A::AbstractMatrix{<:Real})
+    S = size(A, 1)
+    @assert size(A, 2) == S "Adjacency matrix must be square"
+
+    # Number of prey per species (row sums)
+    k = sum(A, dims=2)
+
+    # Identify basal species (no prey)
+    basal = vec(k .== 0)
+
+    # Diet fraction matrix P
+    P = zeros(Float64, S, S)
+    for i in 1:S
+        if k[i] > 0
+            P[i, :] .= A[i, :] ./ k[i]
+        end
+    end
+
+    # Identity matrix
+    I = Diagonal(ones(Float64, S))
+    I = Matrix(I)
+
+    # Right-hand side: 1 for all species
+    b = ones(Float64, S)
+
+    # Solve linear system: (I - P) * TL = 1
+    TL = (I - P) \ b
+
+    return TL
+end
+
+Z = build_niche_trophic(
+    S; conn=0.15, mean_abs=0.5, mag_cv=0.60,
+    degree_family=:uniform, deg_param=1.0,
+    rho_sym=0.0, rng=Random.default_rng()
+)
+Z[Z .< 0.0] .= 0.0
+Z_bool = Z .!= 0.0
+s = general_trophic_levels(Int.(Z_bool))
+
+visualize_escalator(Z, s; B=24)
