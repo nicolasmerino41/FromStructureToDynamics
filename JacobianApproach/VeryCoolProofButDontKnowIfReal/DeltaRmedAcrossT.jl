@@ -16,7 +16,7 @@ function plot_rmed_delta_grid(results, t_vals;
     # --- 1) Compute global max Δ across all q ---
     global_max = 0.0
     global_min = 0.0
-    for q in q_targets
+    for q in q_targets[1]
         mean_q = mean_curve(results[q])
         Δ = delta_curve(mean_q, ref_mean)
         m = maximum(Δ)
