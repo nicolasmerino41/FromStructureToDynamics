@@ -54,7 +54,7 @@ end
 # 2) Builders you already use
 # ------------------------------------------------------------
 build_trophic_ER = function (S; conn, mean_abs, mag_cv, deg_cv, rng)
-    A = build_ER_degcv(S, conn, mean_abs, mag_cv, 0.0, 0.0, deg_cv; rng=rng)
+    A = build_ER_degcv(S, conn, mean_abs, mag_cv, 0.0, 0.0, 0.0, deg_cv; rng=rng)
     isA = realized_IS(A); isA == 0 && return A
     A .* (mean_abs / isA)
 end
@@ -202,7 +202,7 @@ res_base = run_interaction_shuffle_vs_baseline(; S, conn, mean_abs, mag_cv,
     deg_cv=0.0, u_mean=1.0, u_cv=0.6, t_vals, reps=40, seed=10000, perturb=:biomass)
 
 plot_interaction_shuffle_results(res_base)
-plot_rmed_dual(res.t, res.rmed_struct; title="Structured tER")
-plot_rmed_dual(res.t, res.rmed_scram;  title="Interaction-scrambled (diag pinned)")
-plot_rmed_dual(res.t, res.rmed_base0;  title="Baseline ER (source)")
-plot_rmed_dual(res.t, res.rmed_base1;  title="Baseline ER (rewired)")
+plot_rmed_dual(res_base.t, res_base.rmed_struct; title="Structured tER")
+plot_rmed_dual(res_base.t, res_base.rmed_scram;  title="Interaction-scrambled (diag pinned)")
+plot_rmed_dual(res_base.t, res_base.rmed_base0;  title="Baseline ER (source)")
+plot_rmed_dual(res_base.t, res_base.rmed_base1;  title="Baseline ER (rewired)")
