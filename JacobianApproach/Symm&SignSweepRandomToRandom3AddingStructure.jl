@@ -172,8 +172,8 @@ function run_axis_grid(; axis::Symbol, levels::AbstractVector, reps::Int=50,
             rng = Random.Xoshiro(rand(rng_iter, UInt))
 
             # draw two independent TRdeg communities (same knobs) and scale to IS_target
-            A0 = build_ER_degcv(S, conn, mean_abs, mag_cv, 0.0, lvl_sign, lvl_degcv; rng=rng)
-            A1 = build_ER_degcv(S, conn, mean_abs, mag_cv, 0.0, lvl_sign, lvl_degcv; rng=rng)
+            A0 = build_ER_degcv(S, conn, mean_abs, mag_cv, 0.0, 0.0, lvl_sign, lvl_degcv; rng=rng)
+            A1 = build_ER_degcv(S, conn, mean_abs, mag_cv, 0.0, 0.0, lvl_sign, lvl_degcv; rng=rng)
 
             is0 = realized_IS(A0); is1 = realized_IS(A1)
             (is0 == 0 || is1 == 0) && continue
