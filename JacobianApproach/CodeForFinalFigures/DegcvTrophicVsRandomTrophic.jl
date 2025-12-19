@@ -151,8 +151,8 @@ function run_pipeline(;
         u = random_u(S; mean=u_mean, cv=u_cv, rng=rng)
         J = jacobian(A, u)
         
-        Ash = reshuffle_trophic_pairs(A; rng=rng, allow_flip=reshuffle_allow_flip)
-        # Ash = reshuffle_offdiagonal(A; rng=rng)
+        # Ash = reshuffle_trophic_pairs(A; rng=rng, allow_flip=reshuffle_allow_flip)
+        Ash = reshuffle_offdiagonal(A; rng=rng)
         # Ash = random_interaction_matrix(S, connectance; σ=σA, rng=rng)
         Jsh = jacobian(Ash,u)
 
