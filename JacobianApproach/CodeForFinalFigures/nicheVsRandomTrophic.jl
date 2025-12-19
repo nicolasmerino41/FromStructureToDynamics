@@ -110,7 +110,7 @@ function run_pipeline(;
 
         Wsh = build_niche_trophic(
             S; conn=connectance, mean_abs=σA, mag_cv=mag_cv,
-            degree_family=:pareto, deg_param=1.0,
+            degree_family=:uniform, deg_param=1.0,
             rho_sym=0.0, rng=Random.default_rng()
         )
         Jsh = jacobian(Wsh, u)
