@@ -101,20 +101,20 @@ function run_pipeline(;
 
         # --- RESHUFFLE: pairwise trophic reshuffle (preserves +/- pair structure) ---
         # Wsh = reshuffle_trophic_pairs(W; rng=rng, allow_flip=reshuffle_allow_flip)
-        # Wsh = reshuffle_offdiagonal(W; rng=rng)
+        Wsh = reshuffle_offdiagonal(W; rng=rng)
 
-        b_sh = PPMBuilder()
-        set!(b_sh; S=S, B=B, L=L, T=1.5, η=η)
-        net_sh = build(b_sh)
-        A_sh = net_sh.A
+        # b_sh = PPMBuilder()
+        # set!(b_sh; S=S, B=B, L=L, T=1.5, η=η)
+        # net_sh = build(b_sh)
+        # A_sh = net_sh.A
 
-        # --- turn topology into signed interaction matrix W ---
-        Wsh = build_interaction_matrix(A_sh;
-            mag_abs=mag_abs,
-            mag_cv=mag_cv,
-            corr_aij_aji=corr,
-            rng=rng
-        )
+        # # --- turn topology into signed interaction matrix W ---
+        # Wsh = build_interaction_matrix(A_sh;
+        #     mag_abs=mag_abs,
+        #     mag_cv=mag_cv,
+        #     corr_aij_aji=corr,
+        #     rng=rng
+        # )
         Jsh = jacobian(Wsh, u)
 
         for (ti, t) in enumerate(tvals)
@@ -227,7 +227,7 @@ results = run_pipeline(
     # PPM params
     B=24, 
     L=2142,
-    q=1.5,
+    q=0.1,
     η=0.2,
     mag_abs=0.5,
     mag_cv=0.5,
