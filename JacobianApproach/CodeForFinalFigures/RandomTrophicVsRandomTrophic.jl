@@ -119,8 +119,8 @@ function run_pipeline(;
         u = random_u(S; mean=u_mean, cv=u_cv, rng=rng)
         J = jacobian(A, u)
 
-        # Ash = reshuffle_trophic_pairs(A; rng=rng, allow_flip=reshuffle_allow_flip)
-        Ash = reshuffle_offdiagonal(A; rng=rng)
+        Ash = reshuffle_trophic_pairs(A; rng=rng, allow_flip=reshuffle_allow_flip)
+        # Ash = reshuffle_offdiagonal(A; rng=rng)
         # Ash = random_trophic_matrix(S, connectance; σ=σA, rng=rng)
         # Ash = random_interaction_matrix(S, connectance; σ=σA, rng=rng)
         Jsh = jacobian(Ash,u)
@@ -206,7 +206,7 @@ function make_plots(results; save_prefix::Union{Nothing,String}=nothing)
         ylabel="mean Δrmed(t)",
         title="Mean Δrmed(t) = mean(original - reshuffled)"
     )
-    lines!(ax3, t, abs.(results.mean_delta), linewidth=3, label="Δ")
+    lines!(ax3, t, results.mean_delta, linewidth=3, label="Δ")
     axislegend(ax3; position=:rt)
     # Plot 3 axis: ax3 (delta plot; t95 lines are just references)
     isfinite(t95_mean_orig) && vlines!(ax3, t95_mean_orig; color=(:black, 0.35), linewidth=2, linestyle=:dash)
@@ -234,7 +234,7 @@ results = run_pipeline(
     n=50,
     u_mean=1.0,
     u_cv=0.5,
-    σA=0.5,
+    σA=1.0,
     seed=1234,
     perturbation=:biomass,
     reshuffle_allow_flip=true
