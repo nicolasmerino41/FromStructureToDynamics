@@ -1,0 +1,322 @@
+---
+title: "Long Vs Transient"
+author: "Nico, Núria & Jeff"
+date: "2025-12-19"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 5
+  html_document:
+    theme: flatly
+    toc: true
+    toc_depth: 5
+    number_sections: true
+    toc_float:
+      collapsed: false
+    highlight: tango
+  word_document:
+    toc: false
+    toc_depth: '5'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+We want an ecologically meaningful and mathematically explicit way to predict when changing a community (e.g., by rewiring its interaction network) produces (i) primarily long-term differences in recovery, versus (ii) primarily intermediate-time differences (an intermediate peak) with little long-term change.
+
+We consider linearized community dynamics around an equilibrium. Let \(x(t)\) be the vector of species deviations from equilibrium. Then
+
+$$
+\frac{d x}{dt} = J x,
+$$
+
+where \(J\) is the Jacobian (community matrix). The solution is
+
+$$
+x(t) = e^{J t} x(0).
+$$
+
+We work with pulse perturbations (initial displacement \(x(0)\)) and measure how the perturbation magnitude decays over time.
+
+1. Median distance and median return rate (Arnoldi-style approximation)
+
+Let \(C\) be the covariance matrix of the perturbation ensemble (biomass-weighted in your implementation). For isotropic or diagonal-weighted perturbations, \(C\) is symmetric positive definite and typically diagonal. Define the second-moment distance proxy
+
+$$
+S_J(t) := \mathrm{Tr}\big(e^{J t} \, C \, e^{J^\top t}\big).
+$$
+
+Arnoldi et al. show that the median distance over random perturbation directions can be approximated (up to a dimension-dependent constant) by
+
+$$
+M\big(\|x(t)\|\big) \propto \sqrt{\mathrm{Tr}\big(e^{J t} \, C \, e^{J^\top t}\big)} = \sqrt{S_J(t)}.
+$$
+
+A corresponding median average return rate can be written as
+
+$$
+R_{\mathrm{med}}(t) \approx -\frac{1}{t} \ln\left(\frac{M\big(\|x(t)\|\big)}{M\big(\|x(0)\|\big)}\right)
+\approx -\frac{1}{2t}\Big(\ln S_J(t) - \ln S_J(0)\Big).
+$$
+
+Because
+
+$$
+S_J(0) = \mathrm{Tr}(C),
+$$
+
+we can write
+
+$$
+R_{\mathrm{med}}(t) \approx -\frac{1}{2t}\Big(\ln S_J(t) - \ln \mathrm{Tr}(C)\Big).
+$$
+
+This object depends on the entire matrix exponential \(e^{J t}\), hence on the full eigen-structure (eigenvalues and eigenvectors), and is therefore sensitive to multi-mode transient effects at intermediate times.
+
+2. Short-time behavior and why it is weakly topological under diagonal \(C\)
+
+We can expand for small \(t\):
+
+$$
+e^{J t} = I + J t + \frac{1}{2}J^2 t^2 + O(t^3).
+$$
+
+Then
+
+$$
+S_J(t)=\mathrm{Tr}\big((I+Jt+\dots)\,C\,(I+J^\top t+\dots)\big)
+=\mathrm{Tr}(C)+t\,\mathrm{Tr}((J+J^\top)C)+O(t^2).
+$$
+
+Define the symmetric part \(H(J)=(J+J^\top)/2\). Then
+
+$$
+S_J(t)=\mathrm{Tr}(C)+2t\,\mathrm{Tr}(H(J)C)+O(t^2).
+$$
+
+If \(C\) is diagonal (biomass-weighted but independent across species), then the first-order term emphasizes diagonal contributions and any symmetric coupling weighted by biomass variances. In many ecological parameterizations the diagonal self-regulation dominates this early-time expansion, explaining why very short times often show weak sensitivity to rewiring of off-diagonal interaction topology.
+
+3. Long-time behavior and resilience
+
+Let the eigenvalues of \(J\) be \(\{\lambda_i\}\). Define the spectral abscissa
+
+$$
+\alpha(J) := \max_i \Re(\lambda_i).
+$$
+
+If the equilibrium is stable, \(\alpha(J)<0\). Long-time decay rates are governed by the least negative mode, i.e., the eigenvalue with real part closest to \(0\). In many settings the median return rate converges to the asymptotic exponential decay rate:
+
+$$
+\lim_{t\to\infty} R_{\mathrm{med}}(t) = -\alpha(J),
+$$
+
+up to sign conventions (some authors define resilience as \(-\alpha(J)\)). Thus long-time differences between two communities \(J\) and \(J'\) are controlled by
+
+$$
+\Delta_\infty := \left|\alpha(J)-\alpha(J')\right|.
+$$
+
+4. Comparing two communities: baseline \(J\) and rewired \(J'\)
+
+Let the rewired Jacobian be
+
+$$
+J' = J + E,
+$$
+
+where \(E\) is the perturbation induced by rewiring (difference matrix). Define the median-return-rate difference curve
+
+$$
+\Delta R(t) := R_{\mathrm{med}}^{J'}(t) - R_{\mathrm{med}}^{J}(t).
+$$
+
+The empirical phenomenology is:
+
+(a) Sometimes \(\Delta R(t)\) grows roughly monotonically and saturates to a long-time difference (resilience-driven).
+
+(b) Sometimes \(\Delta R(t)\) has an intermediate-time peak even when \(\Delta_\infty\) is small (transient/collective-driven).
+
+We formalize this as a competition between two effects: slow-mode (resilience) coupling and multi-mode transient geometry change.
+
+5. Formalizing long-term change: slow-mode coupling
+
+Assume \(J\) has a simple dominant eigenvalue \(\lambda_1\) with right eigenvector \(v_1^R\) and left eigenvector \(v_1^L\) (so \(J v_1^R=\lambda_1 v_1^R\) and \((v_1^L)^\top J=\lambda_1 (v_1^L)^\top\)). Standard eigenvalue perturbation theory gives, to first order in \(E\):
+
+$$
+\Delta \lambda_1 \approx \frac{(v_1^{L})^\top E\, v_1^{R}}{(v_1^{L})^\top v_1^{R}}.
+$$
+
+Therefore a natural scalar for how strongly the rewiring targets long-term resilience is
+
+$$
+\mathcal{R}(E) := \left|\frac{(v_1^{L})^\top E\, v_1^{R}}{(v_1^{L})^\top v_1^{R}}\right|.
+$$
+
+Interpretation in ecological terms:
+
+(i) \(v_1^R\) identifies which species participate strongly in the slowest-decaying deviation pattern (who remains perturbed the longest).
+
+(ii) \(v_1^L\) identifies which species strongly determine the growth/decay of that mode (who sets the constraint).
+
+(iii) If rewiring changes interactions incident to species with large \(v_1^R\) and \(v_1^L\) weights, then \(\mathcal{R}(E)\) is large and long-time divergence should be large.
+
+Hence:
+
+If \(\mathcal{R}(E)\) is large, we expect \(\Delta_\infty\) large and \(\Delta R(t)\) dominated by long-time separation.
+
+6. Formalizing transient collective change: multi-mode geometry
+
+The key finite-time object is \(S_J(t)=\mathrm{Tr}(e^{Jt} C e^{J^\top t})\). Expand \(e^{Jt}\) using left-right eigenvectors. For diagonalizable \(J\):
+
+$$
+e^{Jt} = \sum_i e^{\lambda_i t} v_i^R (v_i^L)^\top / (v_i^L)^\top v_i^R.
+$$
+
+Plugging this into \(S_J(t)\) yields a double sum with cross-mode terms:
+
+$$
+S_J(t) = \sum_{i,j} e^{(\lambda_i+\lambda_j)t} \, W_{ij}(J,C),
+$$
+
+where the weights \(W_{ij}\) depend on \(C\) and the biorthogonal geometry of eigenvectors. Schematically they include factors like
+
+$$
+(v_i^L)^\top C\, v_j^L \quad\text{and}\quad (v_j^R)^\top v_i^R,
+$$
+
+so non-orthogonality and mode mixing matter. In a normal matrix, eigenvectors are orthogonal and many cross-terms vanish or simplify. In a non-normal matrix, cross-terms can be large and produce transient amplification and interference effects at intermediate times.
+
+To compare two systems, define the transient geometry change over a finite horizon \(T\):
+
+$$
+\Delta_T := \max_{t\in[0,T]} \left|\ln S_{J'}(t) - \ln S_{J}(t)\right|.
+$$
+
+Because
+
+$$
+R_{\mathrm{med}}(t) \approx -\frac{1}{2t}\left(\ln S_J(t) - \ln\mathrm{Tr}(C)\right),
+$$
+
+changes in \(\ln S_J(t)\) map directly into changes in \(R_{\mathrm{med}}(t)\), especially at intermediate times where multiple terms in the double sum contribute.
+
+Thus:
+
+If \(\Delta_T\) is large while \(\Delta_\infty\) is small, we expect an intermediate-time peak in \(\Delta R(t)\).
+
+7. A dominance criterion (mathematical, then ecological)
+
+Mathematical statement:
+
+Resilience-dominated regime if \(\mathcal{R}(E)\) is large (and/or \(\Delta_\infty\) large) compared to the transient change scale.
+
+Peak-producing regime if \(\mathcal{R}(E)\) is small (so \(\Delta_\infty\) small) but \(\Delta_T\) is non-negligible.
+
+Ecological translation:
+
+Long-term divergence is large when rewiring changes the slow stabilizing bottleneck (self-regulation and the dominant stabilizing feedback loops, often involving rare or slow-turnover species).
+
+Intermediate-time peaks arise when rewiring reorganizes disturbance transmission pathways (indirect effects, directional influence chains, pathway alignment) while leaving the slow stabilizing bottleneck essentially unchanged.
+
+8. How to design communities and rewiring to obtain each scenario
+
+Define two ecologically meaningful species sets:
+
+(a) Bottleneck set \(B\): species that dominate asymptotic resilience. Operationally, species with large weights in the dominant left/right eigenvectors (\(v_1^L\) and \(v_1^R\)), and often ecologically corresponding to rare, slow, or near-threshold species.
+
+(b) Transmission set \(T\): species that dominate transient disturbance propagation. Often abundant and mid-trophic species that carry most short-to-intermediate responses in pulse dynamics.
+
+Design for resilience-dominated separation:
+
+(i) Community: make \(B\) well-defined (strong abundance skew, rare bottleneck) and embed \(B\) in short feedback loops.
+
+(ii) Rewiring: preferentially rewire edges incident to \(B\) and its local cycles; introduce or remove feedback loops involving \(B\).
+
+Prediction: \(\mathcal{R}(E)\) large, \(\Delta_\infty\) large, \(\Delta R(t)\) mostly monotone with strong long-time difference.
+
+Design for peak-producing (transient-dominated) separation:
+
+(i) Community: maintain a fixed bottleneck \(B\) but allow rich directional indirect pathways in the rest of the network; trophic hierarchy can enhance non-normal propagation.
+
+(ii) Rewiring: freeze edges incident to \(B\) (keep the slow mode similar), but rewire within \(T\) so as to alter indirect pathways and directionality while preserving first-order statistics (degree/strength sequences, weight distributions).
+
+Prediction: \(\mathcal{R}(E)\) small, \(\Delta_\infty\) small, but \(\Delta_T\) non-negligible, producing an intermediate-time peak in \(\Delta R(t)\).
+
+9. Relation to trophic coherence and directionality
+
+Trophic coherence (or incoherence) quantifies how consistently edges align with a trophic hierarchy. Increasing incoherence corresponds ecologically to more cross-level feeding (omnivory-like shortcuts) and more feedback/cycle potential.
+
+Directionality metrics such as trophic coherence are expected to influence non-normality, eigenvector localization, and sensitivity of dynamics to perturbations, thereby modulating \(\Delta_T\) more consistently than they modulate \(\Delta_\infty\) when rewiring is constrained to preserve the bottleneck.
+
+Hence:
+
+Tuning trophic incoherence can be viewed as tuning the disturbance transmission architecture (collective transient behavior), not necessarily the long-term damping, especially if bottleneck-associated interactions are held fixed.
+
+10. Relation to Zelnik et al. collectivity
+
+Zelnik et al. define collectivity as the spectral radius of a relative interaction matrix \(A\), typically constructed by scaling interspecific interactions by self-regulation (diagonal terms). Denote
+
+$$
+\phi := \rho(A),
+$$
+
+where \(\rho(\cdot)\) is the spectral radius (largest eigenvalue modulus). Collectivity is interpreted as controlling an interaction horizon for indirect effects because indirect interactions can be expanded as
+
+$$
+(I - A)^{-1} = \sum_{n=0}^{\infty} A^n \quad\text{when}\quad \rho(A)<1.
+$$
+
+When \(\phi\) is larger (closer to \(1\)), higher-order indirect pathways (large \(n\)) contribute more strongly and persist longer in the net interaction structure, increasing temporal unpredictability and perturbation depth.
+
+How this connects to your intermediate-time peak:
+
+Your peak is a pulse-dynamics signature of a finite-time window where indirect pathways dominate recovery before asymptotic damping dominates. Zelnik's \(\phi\) is a steady-state/press-style measure of how far indirect effects can extend in principle via the Neumann series.
+
+Why \(\phi\) does not fully determine your peak:
+
+\(\phi\) depends only on eigenvalues of \(A\). Your peak depends on finite-time quantities involving \(e^{Jt}\) and thus on eigenvector geometry and non-normality. In non-normal systems, transient amplification and pathway interference can be large even when spectral radius is modest. Therefore:
+
+(i) \(\phi\) is expected to relate to how long indirect effects remain relevant (interaction horizon), and may predict the timing range over which intermediate-time structure is possible.
+
+(ii) The magnitude of the intermediate-time peak is expected to track amplification/geometry-sensitive measures more than \(\phi\) alone.
+
+A useful integrated statement:
+
+Collectivity \(\phi\) characterizes the potential extent and horizon of indirect interactions, while the intermediate-time peak in \(\Delta R(t)\) characterizes dynamic collectivity in pulse recovery, which depends on both the indirect-interaction horizon (eigenvalues) and the alignment/amplification of indirect pathways (eigenvectors, non-normality).
+
+11. Summary of the formal picture
+
+Given a baseline \(J\) and rewired \(J'=J+E\):
+
+(a) Long-term divergence is controlled by
+
+$$
+\Delta_\infty = |\alpha(J)-\alpha(J')| \approx |\Re(\Delta\lambda_1)|
+\quad\text{with}\quad
+\Delta\lambda_1 \approx \frac{(v_1^{L})^\top E\, v_1^{R}}{(v_1^{L})^\top v_1^{R}}.
+$$
+
+(b) Intermediate-time divergence is controlled by the finite-time trace object
+
+$$
+S_J(t)=\mathrm{Tr}(e^{Jt} C e^{J^\top t}),
+$$
+
+and its change under rewiring
+
+$$
+\Delta_T = \max_{t\in[0,T]} |\ln S_{J'}(t)-\ln S_J(t)|.
+$$
+
+(c) An intermediate-time peak in \(\Delta R(t)\) is expected when:
+
+$$
+\mathcal{R}(E) \text{ is small (so } \Delta_\infty \text{ is small) but } \Delta_T \text{ is non-negligible}.
+$$
+
+(d) Ecologically, this corresponds to:
+
+rewiring changes disturbance transmission pathways (collective indirect effects and directionality) more than it changes the slow stabilizing bottleneck (asymptotic resilience).
+
+(e) Zelnik's collectivity \(\phi=\rho(A)\) provides an ecological descriptor of the indirect-interaction horizon, which can modulate when and how indirect pathways matter, but peak magnitude additionally depends on non-normal transient geometry.
+
