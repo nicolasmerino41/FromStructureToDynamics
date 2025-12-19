@@ -28,6 +28,19 @@ function random_interaction_matrix(S::Int, connectance::Real;
 end
 
 A = random_interaction_matrix(30, 0.1; σ=0.5)
+
+"""
+Recover interaction matrix A from Jacobian J and biomass vector u,
+assuming J = diag(u) * (A - I).
+"""
+function extract_interaction_matrix(J::AbstractMatrix, u::AbstractVector)
+    @assert size(J, 1) == size(J, 2) == length(u)
+    @assert all(u .> 0)
+
+    Dinv = Diagonal(1.0 ./ u)
+    return Dinv * J + I
+end
+
 """
 Reshuffle off-diagonal entries of J while keeping diagonal intact.
 Permutes all off-diagonal values (including zeros), preserving the multiset.
