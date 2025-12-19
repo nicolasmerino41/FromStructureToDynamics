@@ -155,8 +155,8 @@ for q in q_targets
         b = PPMBuilder()
         set!(b; S=120, B=24, L=2142, T=q)
         net = build(b)
-        q = net.q
-        push!(avg_q_vec, q)
+        q_obs = net.q
+        push!(avg_q_vec, q_obs)
     end
 
     avg_q = mean(avg_q_vec)
