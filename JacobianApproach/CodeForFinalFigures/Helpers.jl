@@ -8,23 +8,69 @@ Inputs:
 Returns:
 - t95 (Float64) or Inf if never crosses target.
 """
+"""
+Compute t95 from an rmed(t) curve via:
+    exp(-rmed(t) * t) <= target
+
+- Uses first finite crossing.
+- Interpolates in log-space between bracketing points.
+Returns Inf if it never crosses.
+"""
 function t95_from_rmed(tvals::AbstractVector, rmed::AbstractVector; target::Real=0.05)
     @assert length(tvals) == length(rmed)
-    y = @. exp(-rmed * tvals)              # predicted remaining fraction ||x(t)||/||x(0)||
-    idx = findfirst(y .<= target)          # first crossing (earliest t satisfying)
-    isnothing(idx) && return Inf
-    idx == 1 && return float(tvals[1])
+    @assert target > 0 && target < 1
 
-    # linear interpolation between points idx-1 and idx
-    t1, t2 = float(tvals[idx-1]), float(tvals[idx])
-    y1, y2 = float(y[idx-1]), float(y[idx])
+    n = length(tvals)
 
-    # guard against degenerate segment
-    if y2 == y1
-        return t2
+    # Find first index where y(t) <= target with finite y
+    idx = 0
+    y_prev = NaN
+    t_prev = NaN
+
+    for i in 1:n
+        ti = float(tvals[i])
+        ri = float(rmed[i])
+        if !isfinite(ti) || !isfinite(ri) || ti <= 0
+            continue
+        end
+        yi = exp(-ri * ti)
+        if !isfinite(yi)
+            continue
+        end
+
+        if yi <= target
+            idx = i
+            break
+        end
+        y_prev = yi
+        t_prev = ti
     end
 
-    return t1 + (target - y1) * (t2 - t1) / (y2 - y1)
+    idx == 0 && return Inf
+
+    # If the first valid point already crosses
+    ti = float(tvals[idx])
+    ri = float(rmed[idx])
+    yi = exp(-ri * ti)
+    if !isfinite(y_prev) || !isfinite(t_prev)
+        return ti
+    end
+
+    # Log-linear interpolation between (t_prev, y_prev) and (ti, yi)
+    # Guard against degenerate segments
+    if yi == y_prev || yi <= 0 || y_prev <= 0
+        return ti
+    end
+
+    ℓ1 = log(y_prev)
+    ℓ2 = log(yi)
+    ℓt = log(float(target))
+
+    if ℓ2 == ℓ1
+        return ti
+    end
+
+    return t_prev + (ℓt - ℓ1) * (ti - t_prev) / (ℓ2 - ℓ1)
 end
 
 function median_return_rate(
@@ -85,4 +131,37 @@ function median_return_rate(J::AbstractMatrix, u::AbstractVector; t::Real=0.01, 
 
     r = -(num - den) / (2*t)
     return isfinite(r) ? r : NaN
+end
+
+"""
+Partially reshuffle off-diagonal entries of J:
+- pick m off-diagonal positions
+- permute their values among themselves
+Diagonal stays fixed.
+"""
+function partial_reshuffle_offdiagonal(J::AbstractMatrix; frac::Real=0.1, rng=Random.default_rng())
+    S = size(J,1)
+    @assert 0 ≤ frac ≤ 1
+    J2 = copy(Matrix(J))
+
+    # collect off-diagonal indices
+    idxs = Tuple{Int,Int}[]
+    for i in 1:S, j in 1:S
+        i == j && continue
+        push!(idxs, (i,j))
+    end
+
+    n_off = length(idxs)
+    m = round(Int, frac * n_off)
+    m == 0 && return J2
+
+    chosen = rand(rng, 1:n_off, m)
+    vals = [J2[idxs[k]...] for k in chosen]
+
+    perm = randperm(rng, m)
+    for (pos, k) in enumerate(chosen)
+        (i,j) = idxs[k]
+        J2[i,j] = vals[perm[pos]]
+    end
+    return J2
 end
