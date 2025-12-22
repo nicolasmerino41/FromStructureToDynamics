@@ -95,10 +95,10 @@ function run_pipeline(;
         # for i in 1:S
         #     J[i,i] *= 10.0
         # end
-        # Ash = reshuffle_offdiagonal(A; rng=rng)   # reshuffle on A, not J
+        Ash = reshuffle_offdiagonal(A; rng=rng)   # reshuffle on A, not J
         # Ash = random_interaction_matrix(S, connectance; σ=σA, rng=rng)
         # J  = jacobian(A,  u);  for i in 1:S; J[i,i] *= 10; end
-        Ash = random_interaction_matrix(S, connectance; σ=σA, rng=rng)
+        # Ash = random_interaction_matrix(S, connectance; σ=σA, rng=rng)
 
         Jsh = jacobian(Ash,u)
         # Jsh = reshuffle_offdiagonal(J; rng=rng)
@@ -127,22 +127,22 @@ function make_plots(results; save_prefix::Union{Nothing,String}=nothing)
     rO = results.rmed_orig
     rS = results.rmed_shuf
     # per-community t95s (n curves stored as rows)
-    t95_orig_each = [t95_from_rmed(tvals, vec(rO[k, :])) for k in 1:size(rO, 1)]
-    t95_shuf_each = [t95_from_rmed(tvals, vec(rS[k, :])) for k in 1:size(rS, 1)]
+    t95_orig_each = [t95_from_rmed(t, vec(rO[k, :])) for k in 1:size(rO, 1)]
+    t95_shuf_each = [t95_from_rmed(t, vec(rS[k, :])) for k in 1:size(rS, 1)]
     @info "t95_orig_each: ", t95_orig_each
     @info "t95_shuf_each: ", t95_shuf_each
     # choose how to summarize across communities
     if any(!isinf, t95_orig_each)
         t95_orig = median(filter(isfinite, t95_orig_each))   # or mean(...) or minimum(...)
         # also useful: t95 from the mean curves
-        t95_mean_orig = t95_from_rmed(tvals, results.mean_orig)
+        t95_mean_orig = t95_from_rmed(t, results.mean_orig)
     else
         t95_orig = NaN
         t95_mean_orig = NaN
     end
     if any(!isinf, t95_shuf_each)
         t95_shuf = median(filter(isfinite, t95_shuf_each))
-        t95_mean_shuf = t95_from_rmed(tvals, results.mean_shuf)
+        t95_mean_shuf = t95_from_rmed(t, results.mean_shuf)
     else
         t95_shuf = NaN
         t95_mean_shuf = NaN
@@ -215,7 +215,7 @@ results = run_pipeline(
     n=50,
     u_mean=1.0,
     u_cv=0.5,
-    σA=0.5,
+    σA=1.0,
     perturbation=:biomass,
     tvals = 10 .^ range(log10(0.01), log10(100.0); length=30)
 )
