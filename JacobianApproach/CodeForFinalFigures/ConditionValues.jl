@@ -235,6 +235,12 @@ function run_pipeline(;
     R_orig = fill(NaN, n)
     R_rew  = fill(NaN, n)
 
+    dJ_fro = fill(NaN, n)
+    dJ_2   = fill(NaN, n)
+
+    rel_dJ_fro = fill(NaN, n)
+    rel_dJ_2   = fill(NaN, n)
+
     for k in 1:n
         # Base community
         A = random_interaction_matrix(S, connectance; σ=σA, rng=rng)
@@ -312,6 +318,14 @@ function run_pipeline(;
         R_orig[k] = numerical_abscissa(J)
         R_rew[k]  = numerical_abscissa(Jrew)
 
+        E = Jrew - J
+
+        dJ_fro[k] = norm(E)          # ||J - J'||_F
+        dJ_2[k]   = opnorm(E)             # ||J - J'||_2
+
+        rel_dJ_fro[k] = dJ_fro[k] / norm(J)
+        rel_dJ_2[k]   = dJ_2[k]   / opnorm(J)
+
         # rmed curves
         for (ti, t) in enumerate(tvals)
             rmed_orig[k, ti] = median_return_rate(J, u; t=t, perturbation=perturbation)
@@ -352,6 +366,7 @@ function run_pipeline(;
         Δα=Δα, α_orig=α_orig, α_rew=α_rew,
         G2_orig=G2_orig, G2_rew=G2_rew, ΔG2=ΔG2,
         R_orig=R_orig, R_rew=R_rew, ΔR=ΔR,
+        dJ_fro=dJ_fro, dJ_2=dJ_2, rel_dJ_fro=rel_dJ_fro, rel_dJ_2=rel_dJ_2,
         t95_orig=t95_orig, t95_rew=t95_rew
     )
 end
@@ -387,7 +402,7 @@ function analyze_and_plot(results)
         xlabel="mean_kappa_of_the_original_community", ylabel="ΔT∞ / T∞",
         title="kmean vs ΔT∞"
     )
-    scatter!(ax1, x1, y1, markersize=10)
+    scatter!(ax1, x1./results.dJ_fro[mask_mean], y1, markersize=10)
 
     ax2 = Axis(
         fig[1,2],
@@ -432,6 +447,15 @@ function analyze_and_plot(results)
         title="ΔReactivity vs ΔT∞"
     )
     scatter!(ax6, results.ΔR[mask_mean], y1, markersize=10)
+
+    ax7 = Axis(
+        fig[2, 3],
+        # xscale=log10,
+        yscale=log10,
+        xlabel="dJ_fro", ylabel="ΔT∞ / T∞",
+        title="dJ_fro vs ΔT∞"
+    )
+    scatter!(ax7, results.dJ_fro[mask_mean], y1, markersize=10)
 
     display(fig)
 end
