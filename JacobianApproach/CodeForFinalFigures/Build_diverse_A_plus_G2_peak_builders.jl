@@ -220,8 +220,6 @@ function build_A_diverse(u::AbstractVector;
     end
 end
 
-using LinearAlgebra
-
 # ============================================================
 # Propagator-aligned non-normality / amplification metrics
 # ============================================================
