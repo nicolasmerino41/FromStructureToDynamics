@@ -148,14 +148,14 @@ end
 function mode_kappas(J::AbstractMatrix)
     S = size(J,1)
     try
-        F = eigen(J)          # right eigenvectors
+        F = eigen(J)
         V = F.vectors
         Vinv = inv(V)
-        Y = Vinv'             # columns are left eigenvectors with Y'V = I
+        Y = Vinv'
         κ = [norm(V[:,i]) * norm(Y[:,i]) for i in 1:S]
         return (κ, S)
     catch
-        return fill(NaN, S)
+        return (fill(NaN, S), S)
     end
 end
 
