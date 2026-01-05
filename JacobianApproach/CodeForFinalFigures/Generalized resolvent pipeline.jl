@@ -728,13 +728,13 @@ results = run_resolvent_pipeline(
     ωvals=ωvals,
     stabilize_rewired=true,
     margin=1e-3,
-    family_probs = Dict(
-        :symmetric_like => 0.0,
-        :asymmetric     => 1.0,
-        :feedforward    => 0.0,
-        :jordan         => 0.0,
-        :block_ff       => 0.0
-    )
+    # family_probs = Dict(
+    #     :symmetric_like => 0.0,
+    #     :asymmetric     => 1.0,
+    #     :feedforward    => 0.0,
+    #     :jordan         => 0.0,
+    #     :block_ff       => 0.0
+    # )
 )
 
 analyze_and_plot_resolvent(results)
