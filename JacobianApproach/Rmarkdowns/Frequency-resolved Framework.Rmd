@@ -1,0 +1,250 @@
+---
+title: "Frequency-resolved structural sensitivity of ecosystem recovery"
+author: "Nico, Núria & Jeff"
+date: "2026-01-05"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Motivation
+
+We study when and why network structure matters for recovery after a pulse perturbation.
+Rather than comparing two unrelated systems (which confounds multiple effects), we focus on a single baseline system and quantify its sensitivity to uncertainty in interactions.
+The central object is a frequency-resolved sensitivity spectrum derived from a generalized resolvent, which naturally links to Fourier modes and energy identities (Parseval-type arguments).
+
+This shift changes the target of inference:
+we do not aim to predict a unique time of a bump in time-domain differences.
+Instead, we aim to identify which frequency bands (slow, intermediate, fast) concentrate the sensitivity to structural uncertainty, and then interpret how that spectral organization maps to recovery regimes in standardized time.
+
+## Linearized community dynamics and time scales
+
+Consider a community near equilibrium.
+Let \(x(t)\in\mathbb{R}^S\) be the deviation from equilibrium, and assume linearized dynamics
+$$
+\dot{x}(t) = J x(t),
+$$
+where \(J\) is the Jacobian.
+
+We represent intrinsic time scales with a positive vector \(u\in\mathbb{R}_+^S\).
+Using the convention \(A_{ii}=-1\) for a dimensionless interaction matrix \(A\), we write
+$$
+J = \mathrm{diag}(u)\, A.
+$$
+Equivalently, define \(T = \mathrm{diag}(1/u)\), so that \(A = T J\) and \(J = T^{-1} A\).
+In this representation, \(A\) encodes interaction structure (topology and signed strengths up to scaling), while \(T\) encodes species time scales.
+
+Throughout, we assume the baseline system is stable (Hurwitz), meaning all eigenvalues of \(J\) have negative real part.
+
+## Recovery observables and biomass weighting
+
+We study recovery using an energy-like observable that corresponds to a biomass-weighted perturbation ensemble.
+Let \(C\) be a positive semidefinite weight matrix.
+In the biomass-weighted setting used in our analyses,
+$$
+C = \mathrm{diag}(u^2),
+$$
+which corresponds to weighting perturbations by \(u^2\).
+
+Define the propagator \(E(t) = \exp(J t)\).
+For isotropic random initial conditions with covariance \(C\), a natural scalar summary of remaining perturbation energy is
+$$
+\mathcal{E}(t) = \mathrm{tr}\big(E(t)\, C\, E(t)^\top\big).
+$$
+A convenient effective return-rate summary is then
+$$
+r_{\mathrm{med}}(t) = -\frac{1}{2t}\, \log\Big( \frac{\mathcal{E}(t)}{\mathrm{tr}(C)} \Big).
+$$
+This is the biomass-weighted return-rate curve used throughout; it is not a single asymptotic rate but a time-dependent summary of recovery.
+
+## Structural uncertainty as a perturbation ensemble
+
+The key modeling step is to represent imperfect knowledge of interactions by an ensemble of perturbations to \(A\).
+We write a perturbed interaction matrix as
+$$
+A_{\varepsilon} = A + \varepsilon P,
+$$
+where \(\varepsilon\) sets the uncertainty magnitude and \(P\) is a random direction drawn from a specified ensemble.
+
+We normalize \(P\) to separate direction from magnitude, for example
+$$
+\|P\|_F = 1,
+$$
+and choose \(\varepsilon\) based on the baseline system, for example proportional to \(\|\mathrm{offdiag}(A)\|_F\).
+This ensures that sensitivity comparisons across systems do not conflate structure with perturbation size.
+
+The ensemble of \(P\) encodes the uncertainty model.
+Examples include:
+1) random reshuffling of off-diagonal entries (including zeros) to model uncertain placement of interactions;
+2) pair-preserving reshuffling to preserve dyadic coupling statistics;
+3) constrained perturbations that preserve sign patterns or trophic layering;
+4) coherence-altering perturbations that shift a structural measure while keeping other marginals fixed.
+
+The goal is not to pick an arbitrary \(P\) but to define a defensible distribution \(\mathbb{P}(P)\) and study expectations over it.
+
+## Generalized resolvent and Fourier modes
+
+To connect structure to timescales without relying on a specific time grid, we analyze the system response in frequency space.
+Consider harmonic forcing at angular frequency \(\omega\).
+With \(T=\mathrm{diag}(1/u)\), define the generalized resolvent
+$$
+R(\omega) = \big(i\,\omega\,T - A\big)^{-1}.
+$$
+This object is the resolvent operator in the frequency domain; it becomes an input–state transfer once an input channel is specified, with time scales encoded in \(T\) and structure encoded in \(A\).
+
+Because \(\omega\) indexes Fourier modes, peaks or bands in \(\|R(\omega)\|\) correspond to frequencies at which the system is most responsive.
+Non-normal structure can create large amplification even when all eigenvalues are stable, leading to enhanced intermediate-frequency response.
+
+## Sensitivity of the frequency response to interaction uncertainty
+
+We want a system-level quantity that measures how uncertain interactions change the response.
+Fix a baseline \(A\) and consider a small perturbation \(A_{\varepsilon}=A+\varepsilon P\).
+Using first-order perturbation theory for inverses,
+$$
+R_{\varepsilon}(\omega) = \big(i\,\omega\,T - A - \varepsilon P\big)^{-1}
+\approx R(\omega) + \varepsilon\, R(\omega) P R(\omega).
+$$
+
+We then measure the change in a weighted gain mapping into biomass-weighted state components.
+Let \(U=\mathrm{diag}(u)\), which satisfies \(C = U^2\) in the biomass-weighted setting.
+A natural gain-like matrix is \(R(\omega)U\).
+The first-order change induced by \(P\) is proportional to \(R(\omega) P R(\omega)U\).
+
+This motivates the frequency-resolved sensitivity spectrum
+$$
+S(\omega; P) =
+\varepsilon^2\,
+\frac{\|R(\omega)\,P\,R(\omega)\,U\|_F^2}{\mathrm{tr}(C)}.
+$$
+The scaling by \(\mathrm{tr}(C)=\sum_i u_i^2\) makes the quantity comparable across systems with different overall time-scale weights.
+
+Finally, define the ensemble-averaged sensitivity spectrum
+$$
+\bar{S}(\omega) = \mathbb{E}_{P\sim\mathbb{P}}\big[S(\omega;P)\big].
+$$
+This is the primary system-level object for Option A.
+
+## Parseval-type interpretation
+
+Energy identities link time-domain and frequency-domain quantities.
+For stable linear systems, the total energy transmitted from a stochastic forcing to the state can be written either as a time integral of autocovariances or as a frequency integral of squared transfer gains.
+This is the conceptual reason the generalized resolvent appears as the central object: it decomposes sensitivity by Fourier mode.
+
+Our observable \(r_{\mathrm{med}}(t)\) is not itself a direct energy integral, so Parseval does not imply an exact equality between \(r_{\mathrm{med}}(t)\) and a resolvent norm.
+However, \(\bar{S}(\omega)\) provides a principled band decomposition of where interaction uncertainty affects the response, and it is expected to correlate with time-domain deviations in recovery in a regime-dependent way.
+
+## From spectra to regime statements
+
+The main claim is not that a time-domain bump must exist.
+The claim is that structural uncertainty can concentrate its effect in different frequency bands.
+
+We define bands on \(\omega\), for example:
+- low-frequency band \(\omega\in[0,\omega_L]\),
+- intermediate band \(\omega\in[\omega_L,\omega_H]\),
+- high-frequency band \(\omega\ge\omega_H\).
+
+Then define band sensitivities, for instance
+$$
+S_{\mathrm{low}} = \int_0^{\omega_L} \bar{S}(\omega)\,d\omega,\quad
+S_{\mathrm{mid}} = \int_{\omega_L}^{\omega_H} \bar{S}(\omega)\,d\omega,\quad
+S_{\mathrm{high}} = \int_{\omega_H}^{\infty} \bar{S}(\omega)\,d\omega.
+$$
+A compact diagnostic is the ratio
+$$
+\frac{S_{\mathrm{mid}}}{S_{\mathrm{low}}}.
+$$
+A large value indicates that uncertainty predominantly affects intermediate frequencies rather than slow modes.
+
+This provides a rigorous meaning for the phrase structure matters at intermediate times: it means structural uncertainty primarily impacts intermediate Fourier modes, which correspond to intermediate temporal variation after appropriate time normalization.
+
+## Time normalization and why a unique bump time is not required
+
+A major difficulty in time-domain bump analyses is that raw time \(t\) is not comparable across communities with different time scales.
+Standardization using a recovery time such as \(t_{95}\) is one option.
+If \(r_{\mathrm{med}}(t)\) is known on a grid \(t_k\), one can estimate \(t_{95}\) as the first time at which the predicted remaining fraction falls below a target:
+$$
+\exp\big(-r_{\mathrm{med}}(t)\,t\big) \le 0.05.
+$$
+This defines a system-specific timescale and yields a normalized time \(\tau = t/t_{95}\).
+
+Even with normalization, a clear intermediate bump in \(|\Delta r_{\mathrm{med}}(\tau)|\) is not guaranteed:
+different perturbation directions \(P\) can emphasize different bands, and \(r_{\mathrm{med}}\) is a nonlinear summary rather than a linear energy measure.
+Therefore, the framework focuses on bandwise sensitivity rather than predicting a single peak time.
+
+## Role of non-normality and ecological structure
+
+Non-normality describes the potential for transient amplification due to non-orthogonal modes.
+This can elevate intermediate-frequency response and hence intermediate-band sensitivity.
+Ecological structures such as trophic coherence can constrain pathways of interaction and systematically shift where \(\bar{S}(\omega)\) concentrates, providing a mechanistic link from an interpretable ecological property to recovery sensitivity regimes.
+
+In this framework, the empirical goal is:
+1) estimate \(\bar{S}(\omega)\) under a defined perturbation ensemble;
+2) summarize it by band integrals or ratios;
+3) relate these summaries to time-domain deviations of recovery after appropriate time normalization;
+4) show how ecological structure shifts the sensitivity spectrum and thereby shifts which regimes are most affected by uncertainty.
+
+## Summary of the framework
+
+1) Fix a stable baseline system \(J=\mathrm{diag}(u)A\) with \(A_{ii}=-1\) and \(T=\mathrm{diag}(1/u)\).
+2) Define interaction uncertainty by an ensemble \(A_{\varepsilon}=A+\varepsilon P\) with normalized \(P\).
+3) Use the generalized resolvent \(R(\omega)=(i\omega T-A)^{-1}\) to define a frequency-resolved sensitivity
+$$
+S(\omega;P)=\varepsilon^2\,\|R(\omega)PR(\omega)U\|_F^2/\mathrm{tr}(C),
+$$
+and its ensemble mean \(\bar{S}(\omega)\).
+4) Summarize \(\bar{S}(\omega)\) by band integrals and ratios to define regime-level statements about where structure matters.
+5) Use normalized time (e.g., \(\tau=t/t_{95}\)) to interpret time-domain recovery deviations without requiring a universal bump time.
+
+cat('
+# Forced formulation, channels, and what the resolvent transfers
+
+The generalized resolvent \(R(\omega) = (i\,\omega\,T - A)^{-1}\) is a property of the pair \((A,T)\). By itself, \(R(\omega)\) is not automatically a transfer function from an externally applied forcing to the state, because that depends on how the forcing enters the dynamics.
+
+To make this explicit, consider a forced linear system written in the time-scale form
+
+$$
+T\,\dot x(t) = A\,x(t) + B\,u(t),
+$$
+
+where \(x(t)\in\mathbb R^S\) is the state, \(u(t)\) is an external input, and \(B\) specifies the input channel (which components are forced and with what scaling). Taking Fourier transforms gives
+
+$$
+(i\,\omega\,T - A)\,\hat x(\omega) = B\,\hat u(\omega),
+$$
+
+so the input--state transfer is
+
+$$
+\hat x(\omega) = R(\omega)\,B\,\hat u(\omega).
+$$
+
+If an output \(y(t)=C\,x(t)\) is of interest, then the input--output transfer is \(C\,R(\omega)\,B\). In other words, it is most precise to call \(R(\omega)\) the resolvent operator, and to call \(R(\omega)B\) (or \(CR(\omega)B\)) the transfer once channels \(B\) (and \(C\)) are specified.
+
+In our setting, the biomass-weighted metric defines a natural channel consistent with the weighting. A convenient canonical choice is
+
+$$
+T\,\dot x(t) = A\,x(t) + U\,w(t), \quad U = \mathrm{diag}(u),
+$$
+
+where \(w(t)\) is an isotropic input (e.g. unit-covariance forcing across components). Then \(R(\omega)U\) is the transfer from the standardized forcing \(w\) to the state \(x\), and frequency-domain gains based on \(\|R(\omega)U\|\) quantify biomass-consistent amplification.
+
+# Typical versus worst-case sensitivity to structural uncertainty
+
+Jeff\'s key move is to study sensitivity of a single system to uncertainty in its interaction structure, rather than comparing two unrelated systems. Formally, consider an uncertainty direction \(P\) applied to the interaction matrix, producing a perturbed system \(A + \varepsilon P\) with small \(\varepsilon\). The first-order change in the transfer \(R(\omega)B\) is controlled by \(R(\omega)\,P\,R(\omega)\,B\), which motivates a frequency-resolved sensitivity spectrum \(S(\omega;P)\) measuring how strongly uncertainty along direction \(P\) can change the input--state mapping.
+
+There are two complementary ways to summarize \(S(\omega;P)\), corresponding to different scientific questions.
+
+## Ensemble (typical) sensitivity
+
+In the ensemble view, \(P\) is random and represents a model of information uncertainty (e.g. sampling noise, partial rewiring, or other plausible structural errors). One then summarizes sensitivity by averaging or taking quantiles over \(P\): for example, \(\mathbb E_P[S(\omega;P)]\) or a high quantile curve in \(\omega\). This answers a typicality question: which frequency bands are expected to be most sensitive under realistic uncertainty?
+
+## Worst-case (adversarial) sensitivity
+
+In the worst-case view, one asks for the uncertainty direction \(P\) (subject to constraints such as \(\|P\|_F=1\) and any structural restrictions) that maximizes sensitivity at each \(\omega\). This produces an upper-envelope curve \(\sup_P S(\omega;P)\), which quantifies the fragility or capacity for extreme sensitivity even if typical perturbations do not align with the maximally amplifying direction.
+
+Reporting both is useful because ensemble summaries are interpretable as expected behavior under a specified uncertainty model, whereas worst-case summaries quantify an intrinsic susceptibility of the system. In applications, worst-case results should be interpreted with the stated constraints on \(P\), since unconstrained maximizers may correspond to unrealistic ecological perturbations.
+
