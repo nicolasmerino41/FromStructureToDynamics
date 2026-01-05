@@ -1,0 +1,152 @@
+---
+title: "Frequency-resolved Framework Summary"
+author: "Nico, Núria & Jeff"
+date: "2026-01-05"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Frequency-resolved structural sensitivity of recovery
+
+We want a consistent way to quantify when and how interaction structure matters for recovery after a pulse, without relying on comparisons between unrelated systems. The central object is a frequency-resolved sensitivity spectrum derived from a generalized resolvent. The output is a set of regime-level diagnostics (band sensitivities and ratios), not a single predicted bump time.
+
+## Baseline linear system
+
+We consider a stable linearized community dynamics
+
+$$
+\dot x(t) = J x(t),
+$$
+
+with species time-scale vector \(u\in\mathbb R_+^S\). We write
+
+$$
+J = \mathrm{diag}(u)\,A, \quad A_{ii}=-1,
+$$
+
+and define
+
+$$
+T = \mathrm{diag}(1/u).
+$$
+
+Here, \(A\) captures interaction structure and \(T\) captures intrinsic time scales.
+
+## Biomass-weighted recovery metric
+
+We focus on the biomass-weighted return-rate curve \(r_{\mathrm{med}}(t)\). This corresponds to weighting perturbations by
+
+$$
+C = \mathrm{diag}(u^2).
+$$
+
+This weighting is carried through the frequency-domain formulation by choosing a consistent input channel (defined below).
+
+## Forced formulation and channels
+
+The resolvent becomes a literal transfer operator only after specifying how forcing enters. We use the time-scale form
+
+$$
+T\,\dot x(t) = A\,x(t) + B\,u(t).
+$$
+
+Taking Fourier transforms gives
+
+$$
+\hat x(\omega) = R(\omega)\,B\,\hat u(\omega),
+\quad
+R(\omega) = (i\,\omega\,T - A)^{-1}.
+$$
+
+To align with the biomass-weighted metric, we choose the input channel
+
+$$
+B = U, \quad U=\mathrm{diag}(u),
+$$
+
+so that forcing \(w(t)\) with unit covariance is mapped through \(U\) into the state. This is the reason we use \(R(\omega)U\) rather than \(R(\omega)\) alone: it is the channel consistent with the biomass-weighted setting \(C=U^2\).
+
+## Structural uncertainty model
+
+We model imperfect knowledge of interactions by perturbing the interaction matrix:
+
+$$
+A_{\varepsilon} = A + \varepsilon P,
+$$
+
+where \(\varepsilon\) is a fixed uncertainty magnitude (set relative to the baseline system) and \(P\) is a direction of uncertainty. The definition of \(P\) is the key modeling choice and represents an uncertainty ensemble \(\mathbb P(P)\) (for example, rewiring-based directions, constrained perturbations, or other ecologically motivated error models). Directions \(P\) are normalized (e.g. \(\|P\|_F=1\)) so that \(\varepsilon\) controls the magnitude.
+
+## Frequency-resolved sensitivity spectrum
+
+For a given direction \(P\), small-\(\varepsilon\) perturbation theory yields that the first-order change in the input--state mapping \(R(\omega)B\) is controlled by \(R(\omega)PR(\omega)B\). With \(B=U\), we define a biomass-consistent sensitivity spectrum
+
+$$
+S(\omega;P) =
+\varepsilon^2\,
+\frac{\|R(\omega)\,P\,R(\omega)\,U\|_F^2}{\mathrm{tr}(C)},
+\quad
+C=U^2.
+$$
+
+This spectrum decomposes sensitivity to interaction uncertainty by Fourier frequency \(\omega\).
+
+## Typical versus worst-case sensitivity
+
+We consider two complementary summaries.
+
+### Typical (ensemble) sensitivity
+
+In the typical view, \(P\) is random with \(P\sim\mathbb P(P)\). We summarize with
+
+$$
+\bar S(\omega) = \mathbb E_P[S(\omega;P)],
+$$
+
+and/or high quantiles over \(P\). This answers: under a specified uncertainty model, which frequency bands are typically most sensitive?
+
+### Worst-case (capacity) sensitivity
+
+In the worst-case view, we quantify the maximum sensitivity over allowed directions:
+
+$$
+S_{\max}(\omega) = \sup_{P\in\mathcal P} S(\omega;P),
+$$
+
+where \(\mathcal P\) encodes constraints such as \(\|P\|_F=1\) and any ecological restrictions. This answers: what is the intrinsic capacity for extreme sensitivity if uncertainty aligns with the most amplifying direction?
+
+Both are reported because typical sensitivity is realism-driven (depends on \(\mathbb P(P)\)), while worst-case sensitivity is fragility-driven (depends on constraints defining \(\mathcal P\)).
+
+## Regime diagnostics from band sensitivities
+
+We convert \(\bar S(\omega)\) or \(S_{\max}(\omega)\) into regime-level metrics by integrating over frequency bands:
+
+$$
+S_{\mathrm{low}} = \int_0^{\omega_L} S(\omega)\,d\omega,\quad
+S_{\mathrm{mid}} = \int_{\omega_L}^{\omega_H} S(\omega)\,d\omega,\quad
+S_{\mathrm{high}} = \int_{\omega_H}^{\infty} S(\omega)\,d\omega.
+$$
+
+A primary diagnostic is the ratio
+
+$$
+\rho = \frac{S_{\mathrm{mid}}}{S_{\mathrm{low}}},
+$$
+
+interpreted as the relative importance of intermediate-frequency (collective, potentially non-normal) sensitivity versus slow-mode (resilience-like) sensitivity.
+
+## Time-domain connection and standardization
+
+We keep time-domain recovery summaries (such as \(r_{\mathrm{med}}(t)\)) as secondary validation. Raw time \(t\) is not comparable across communities, so any comparison should be done in standardized time (e.g. using a recovery time such as \(t_{95}\) computed from \(r_{\mathrm{med}}(t)\)). The framework does not require that a unique bump time exists; instead it predicts whether structural uncertainty is concentrated in slow versus intermediate regimes, which should be reflected statistically in standardized-time recovery differences.
+
+## Workflow summary
+
+1) Specify baseline \((A,T)\) and compute \(R(\omega)=(i\omega T-A)^{-1}\) on a frequency grid.
+2) Specify an uncertainty model \(\mathbb P(P)\) and a magnitude \(\varepsilon\) (normalized directions).
+3) Compute typical spectrum \(\bar S(\omega)\) and worst-case envelope \(S_{\max}(\omega)\) (subject to constraints).
+4) Reduce spectra to band sensitivities and ratios (e.g. \(S_{\mathrm{mid}}/S_{\mathrm{low}}\)).
+5) Use standardized time to relate these diagnostics to time-domain recovery summaries as a secondary check.
