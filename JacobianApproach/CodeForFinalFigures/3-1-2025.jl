@@ -35,6 +35,7 @@
 using Random, LinearAlgebra, Statistics, Distributions
 using CairoMakie
 using Base.Threads
+import Base.Threads.atomic_add!
 
 # If you see oversubscription (BLAS + Julia threads), uncomment:
 # BLAS.set_num_threads(1)
@@ -328,11 +329,11 @@ function eval_one_P(base::BaseSystem, Pdir::Matrix{Float64};
         tslope=tslope,
 
         old_peak=pm_old.peak,
-        old_ω=pm_old.ωstar,
+        old_ω=pm_old.xstar,
         old_ωbar=ωbar_old,
 
         jeff_peak=pm_jeff.peak,
-        jeff_ω=pm_jeff.ωstar,
+        jeff_ω=pm_jeff.xstar,
         jeff_ωbar=ωbar_jeff
     )
 end
