@@ -533,7 +533,7 @@ end
 ωvals = 10 .^ range(log10(1e-4), log10(1e4); length=90)
 
 res = run_sensitivity_experiment(
-    S=80,
+    S=120,
     η_grid=collect(range(0.0, 1.0; length=7)),
     base_reps=4,
     P_samples=60,
