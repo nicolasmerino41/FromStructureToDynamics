@@ -676,11 +676,11 @@ res_domain_trophic = run_time_domain_pipeline(
 )
 
 # quick acceptance report
-ηs = [b.η for b in res.bases]
+ηs = [b.η for b in res_domain_trophic.bases]
 for η in sort(unique(ηs))
     idx = findall(x -> x == η, ηs)
-    acc = sum(res.accepted[idx])
-    rej = sum(res.rejected[idx])
+    acc = sum(res_domain_trophic.accepted[idx])
+    rej = sum(res_domain_trophic.rejected[idx])
     @info "η=$(round(η,digits=2)) accepted=$acc rejected=$rej acc_rate=$(acc/(acc+rej+1e-9))"
 end
 
