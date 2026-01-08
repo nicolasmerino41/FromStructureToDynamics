@@ -1,0 +1,151 @@
+---
+title: "Relevant Window 2"
+author: "Nico, Jeff & Núria"
+date: "2026-01-07"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+My goal is to quantify when and why network structure (beyond time scales and asymptotic resilience) can generate meaningful deviations in recovery behaviour. I'm not lookig for a unique “mid-time” peak. Instead, I quantify the amount of structure-driven divergence accumulated during the only time interval that is intrinsically interpretable across systems: the pre-recovery window up to a recovery threshold (95% recovery).
+
+## 1. Dynamics, rmed, and definitions
+
+Linearised community dynamics around equilibrium,
+$$
+\frac{dx}{dt} = J x
+$$
+with a stable Jacobian $J$. Let $u$ be the vector of species rates.
+
+**Note: I'm starting to get confused with the definition of time scales, so I'm calling \(u\) rates, and later I'll call \(T = \mathrm{diag}(1/u)\) the matrix of time scales but I'm not sure this is correct, specially when \(u\) also enters \(r_{med}\). The thing is that the way you defined \(T\) forces T to have units of \(t\), not \(1/t\), right?**
+
+The biomass-weighted median return-rate $r_{med}(t)$ from the propagator $E(t) = \exp(Jt)$ is
+$$
+r_{med}(t) = -\frac{1}{2 t} \Big[ \log\, \mathrm{tr}( E(t) \, C \, E(t)^\top ) - \log\, \mathrm{tr}(C) \Big]
+$$
+where
+$$
+C = \mathrm{diag}(u^2)
+$$
+Given a baseline system and a structurally perturbed system (same $u$, modified interactions), we define the structural discrepancy
+$$
+\Delta(t) = \big| r_{med,\,base}(t) - r_{med,\,pert}(t) \big|
+$$
+
+## 2. Defining the relevant time window
+
+Given that
+$$
+y(t) = \exp\big( - r_{med,\,base}(t)\, t \big)
+$$
+we can predict the remaining fraction of displacement under the baseline $r_{med}$ at time $t$. So, implicitly, $t_{95}$ is the earliest time such that
+$$
+y(t) \le 0.05
+$$
+The interval $[0,\, t_{95}]$ is the relevant window, the time before the system has essentially recovered. 
+I know that short-time behaviour is dominated purely by time scales but I don't know its duration, so for now, I do not partition $[0, t_{95}]$ into “short and intermediate” because I don't really know what the short time range is.
+
+## 3. Relevant-window structural error (time-domain)
+
+I summarise divergence over the relevant window via the integral
+
+$$
+\mathrm{Err}_{rel} = \int_{t_{min}}^{t_{95}} \Delta(t) \, d\log t
+$$
+
+$t_{min}$ can be the smallest time in the grid or we could try to exclude the time-scale-dominated regime in some way.
+
+## 4. Generalised resolvent and sensitivity spectrum (frequency-domain)
+
+Let
+$$
+J = \mathrm{diag}(u)\, \bar{A}
+$$
+where $\bar{A}$ has diagonal entries
+$$
+\bar{A}_{ii} = -1
+$$
+The time-scale matrix is
+$$
+T = \mathrm{diag}(1/u)
+$$
+For purely imaginary $z = i\omega$, the generalised resolvent is
+$$
+R(\omega) = \big( i\omega T - \bar{A} \big)^{-1}
+$$
+
+Structural uncertainty is represented by a perturbation of $\bar{A}$,
+$$
+\bar{A} \rightarrow \bar{A} + \varepsilon P
+$$
+where $P$ is a direction matrix with
+$$
+\mathrm{diag}(P) = 0, \qquad \|P\|_F = 1
+$$
+only $\varepsilon$ controls the magnitude of the perturbation. 
+
+**This is the part that I don't know if I did right**
+
+Since \(r_{med}\) is biomass-weighted, the forcing-to-state factor is $\mathrm{diag}(u)$, because $C = \mathrm{diag}(u^2)$ corresponds to $\mathrm{diag}(u)$ acting as a square-root weighting.
+
+Then, a frequency-resolved sensitivity spectrum for a given $P$ is
+$$
+S(\omega; P) = \varepsilon^2 \, \frac{ \| R(\omega)\, P\, R(\omega)\, \mathrm{diag}(u) \|_F^2 }{ \sum_i u_i^2 }
+$$
+
+By doing it this way, I can look at two things:
+\begin{enumerate}
+\item typical sensitivity, by sampling many $P$ from a given uncertainty distribution (e.g. Gaussian noise on off-diagonals) and averaging $S(\omega; P)$ across $P$.
+\item worst-case sensitivity, by using a singular-value-based upper limit that captures the most amplifiable perturbation direction at each frequency.
+\end{enumerate}
+
+## 5. Matching frequency & time
+
+I define the frequency cutoff using \(t_{95}\)
+$$
+\omega_{95} = \frac{1}{t_{95}}
+$$
+
+The, the  relevant sensitivity is the integral of sensitivity over frequencies corresponding to times at or faster than $t_{95}$:
+$$
+\mathrm{Sens}_{rel} = \int_{\omega_{95}}^{\infty} S(\omega) \, d\omega
+$$
+If we had defined a \(t_{min}\) in the time-domain section, then, it would be
+$$
+\omega_{max} = \frac{1}{t_{min}}
+$$
+and the integral range would be
+$$
+[\omega_{95},\, \omega_{max}]
+$$
+
+## 6. Test
+
+Across communities of different structure (and under a fixed uncertainty model for $P$), I test whether
+$\mathrm{Sens}_{rel}$ correlates with $\mathrm{Err}_{rel}$.
+
+This is the link between frequency-resolved structural sensitivity and accumulated structural discrepancy over the relevant time window. 
+
+I used this framework because it does not require defining unique intermediate-time peak; it only tests whether systems with more sensitivity at frequencies relevant before recovery tend to accumulate larger deviations in recovery behaviour before recovery is achieved.
+
+## 7. Cutoff frequency as a minimal time to get divergence
+
+I did not fully understand the suggestion but I assume you mean the time at which we have already accumulated a certain fraction of sensitivity (compared to the total accumulated). Now, the total accumulated can be the whole time period or the relevant window. I'll do it relative to the total relevant window since it's what we care about. 
+
+Thus, we can define the cumulative sensitivity mass above $\omega_{95}$:
+$$
+C(\Omega) = \frac{ \int_{\omega_{95}}^{\Omega} S(\omega) \, d\omega }{ \int_{\omega_{95}}^{\infty} S(\omega) \, d\omega }
+$$
+And for a chosen fraction $q$ (e.g. $0.1$), we define $\omega_q$ as the smallest $\Omega$ such that
+$$
+C(\Omega) = q
+$$
+and set
+$$
+t_q = \frac{1}{\omega_q}
+$$
+This would yield an interpretable minimal time at which a chosen fraction of the relevant sensitivity is accumulated.
