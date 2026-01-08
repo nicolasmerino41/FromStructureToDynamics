@@ -1,0 +1,170 @@
+---
+title: "Relevant-window"
+author: "Nico, Núria & Jeff"
+date: "2026-01-07"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Our goal is to quantify when and why network structure (beyond single-species time scales and beyond asymptotic resilience) can generate meaningful deviations in recovery behaviour. We do not attempt to locate a unique “mid-time” peak. Instead, we quantify the amount of structure-driven discrepancy accumulated during the only time interval that is intrinsically interpretable across systems: the pre-recovery window up to a recovery threshold (here 95 percent recovery).
+
+## 1. Dynamics, recovery metric, and structural discrepancy
+
+Consider a linearised community dynamics around equilibrium,
+$$
+\frac{dx}{dt} = J x,
+$$
+with a stable Jacobian $J$. Let $u$ be the vector of species time scales (biomass weights), and define the biomass-weighted return-rate curve $r_{med}(t)$ from the propagator $\Phi(t) = \exp(Jt)$ as
+$$
+r_{med}(t) = -\frac{1}{2 t} \Big[ \log\, \mathrm{tr}( \Phi(t) \, C \, \Phi(t)^\top ) - \log\, \mathrm{tr}(C) \Big],
+$$
+where
+$$
+C = \mathrm{diag}(u^2).
+$$
+This is the weighted $r_{med}$ used throughout.
+
+Given a baseline system and a structurally perturbed system (same $u$, modified interactions), define the instantaneous structural discrepancy
+$$
+\Delta(t) = \big| r_{med,\,base}(t) - r_{med,\,pert}(t) \big|.
+$$
+
+## 2. Defining the relevant time window without arbitrary cutoffs
+
+A recovery threshold defines an interpretable time scale. Let
+$$
+y(t) = \exp\big( - r_{med,\,base}(t)\, t \big),
+$$
+which is the predicted remaining fraction of displacement under the baseline $r_{med}$ at time $t$. Define $t_{95}$ implicitly as the earliest time such that
+$$
+y(t) \le 0.05.
+$$
+In practice, $t_{95}$ is obtained by scanning the $r_{med}(t)$ grid and interpolating when $\exp(-r_{med}(t)\, t)$ crosses $0.05$.
+
+The interval
+$$
+[0,\, t_{95}]
+$$
+is the relevant window: it is the time before the system has essentially recovered. Short-time behaviour dominated purely by time scales may exist, but its duration can be extremely small and depends on $u$. Therefore, we do not partition $[0, t_{95}]$ into “early–mid–late” sub-windows, since the location of collective (non-normal) effects within the relevant window is not known \emph{a priori} and may vary across systems.
+
+## 3. Relevant-window structural error (time-domain target)
+
+We summarise discrepancy over the relevant window via an integral that is robust to large dynamic ranges of time. Two options are useful.
+
+\textbf{Option A (scale-fair, equal weight per decade of time):}
+$$
+\mathrm{Err}_{rel} = \int_{t_{min}}^{t_{95}} \Delta(t) \, d\log t,
+$$
+that is,
+$$
+\int \Delta(t)\, \frac{dt}{t}.
+$$
+Numerically this is evaluated using a trapezoidal rule on a log-spaced $t$ grid.
+
+\textbf{Option B (literal time accumulation):}
+$$
+\mathrm{Err}_{rel}^{(t)} = \int_{t_{min}}^{t_{95}} \Delta(t) \, dt.
+$$
+
+The lower bound $t_{min}$ can be chosen as the smallest available time in the grid. If one wishes to exclude an ultra-short regime dominated by the diagonal (time scales), a data-driven alternative is to set $t_{min}$ as the first time at which $r_{med,\,base}(t)$ departs from its smallest-time value by a small relative amount; this exclusion can be checked for robustness.
+
+The main analysis uses $\mathrm{Err}_{rel}$ (Option A), and we verify that conclusions do not hinge on the precise handling of the ultra-short regime.
+
+## 4. Generalised resolvent and sensitivity spectrum (frequency-domain predictor)
+
+Write the system in scaled form
+$$
+J = \mathrm{diag}(u)\, \bar{A},
+$$
+where $\bar{A}$ has diagonal entries
+$$
+\bar{A}_{ii} = -1.
+$$
+Define the time-scale matrix
+$$
+T = \mathrm{diag}(1/u).
+$$
+For purely imaginary $z = i\omega$, the generalised resolvent is
+$$
+R(\omega) = \big( i\omega T - \bar{A} \big)^{-1}.
+$$
+
+Structural uncertainty is represented by a perturbation of $\bar{A}$,
+$$
+\bar{A} \rightarrow \bar{A} + \varepsilon P,
+$$
+where $P$ is a direction matrix with
+$$
+\mathrm{diag}(P) = 0, \qquad \|P\|_F = 1,
+$$
+and $\varepsilon$ is a magnitude. For biomass-weighted responses, the natural forcing-to-state factor is $\mathrm{diag}(u)$, because
+$$
+C = \mathrm{diag}(u^2)
+$$
+corresponds to $\mathrm{diag}(u)$ acting as a square-root weighting.
+
+A frequency-resolved sensitivity spectrum for a given $P$ is
+$$
+S(\omega; P) = \varepsilon^2 \, \frac{ \| R(\omega)\, P\, R(\omega)\, \mathrm{diag}(u) \|_F^2 }{ \sum_i u_i^2 }.
+$$
+
+We study both:
+\begin{enumerate}
+\item typical sensitivity, by sampling many $P$ from a chosen uncertainty distribution (e.g. iid Gaussian noise on off-diagonals) and averaging $S(\omega; P)$ across $P$;
+\item worst-case sensitivity, by using a singular-value-based upper envelope that captures the most amplifiable perturbation direction at each frequency.
+\end{enumerate}
+
+## 5. Matching frequency content to the relevant window
+
+To avoid arbitrary frequency bands, we anchor frequency cutoffs to the same recovery-derived time scale. Define a recovery frequency
+$$
+\omega_{95} = \frac{1}{t_{95}}.
+$$
+
+We then define the relevant sensitivity mass as the integral of sensitivity over frequencies corresponding to time scales at or faster than $t_{95}$:
+$$
+\mathrm{Sens}_{rel} = \int_{\omega_{95}}^{\infty} S(\omega) \, d\omega,
+$$
+computed numerically on a finite frequency grid. If an ultra-short-time exclusion is used in time, the matching upper frequency cutoff is
+$$
+\omega_{max} = \frac{1}{t_{min}},
+$$
+and the integral is taken over
+$$
+[\omega_{95},\, \omega_{max}].
+$$
+
+This construction ensures that both $\mathrm{Err}_{rel}$ and $\mathrm{Sens}_{rel}$ refer to the same interpretable regime: the pre-recovery window.
+
+## 6. Main testable claim
+
+Across heterogeneous baseline systems (different structures) under a fixed uncertainty model for $P$, we test whether
+$$
+\log\, \mathrm{Sens}_{rel} \; \text{correlates with} \; \log\, \mathrm{Err}_{rel}.
+$$
+
+This is an energy-like link between frequency-resolved structural sensitivity and accumulated structural discrepancy over the relevant time window. Importantly, the framework does not require defining or predicting a unique mid-time peak; it only claims that systems with more sensitivity content at frequencies relevant before recovery tend to accumulate larger deviations in recovery behaviour before recovery is achieved.
+
+## 7. Optional: Jeff’s cutoff frequency as a minimal divergence time scale
+
+To obtain a time-scale statement without a mid-time window, define the cumulative sensitivity mass above $\omega_{95}$:
+$$
+C(\Omega) = \frac{ \int_{\omega_{95}}^{\Omega} S(\omega) \, d\omega }{ \int_{\omega_{95}}^{\infty} S(\omega) \, d\omega }.
+$$
+For a chosen fraction $q$ (e.g. $0.5$ or $0.8$), define $\omega_q$ as the smallest $\Omega$ such that
+$$
+C(\Omega) = q,
+$$
+and set
+$$
+t_q = \frac{1}{\omega_q}.
+$$
+This yields an interpretable minimal time scale at which a chosen fraction of the relevant sensitivity budget is accumulated, without partitioning the relevant window into arbitrary sub-windows.
+
+
+
