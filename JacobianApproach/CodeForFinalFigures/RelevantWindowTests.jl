@@ -30,9 +30,6 @@ using Random, LinearAlgebra, Statistics, Distributions
 using CairoMakie
 using Base.Threads
 
-# If BLAS oversubscribes with Julia threads, uncomment:
-# BLAS.set_num_threads(1)
-
 # -----------------------------
 # Utilities
 # -----------------------------
@@ -336,7 +333,9 @@ end
 # Total: ∫ Δ(τ) d log τ (over full available τ range)
 # Relevant: ∫_{τ<=1} Δ(τ) d log τ
 # -----------------------------
-function time_errors_normalised(tvals::Vector{Float64}, rbase::Vector{Float64}, rpert::Vector{Float64})
+function time_errors_normalised(tvals::Vector{Float64}, rbase::Vector{Float64}, rpert::Vector{Float64};
+    q_cutoff::Float64=0.5
+)
     @assert length(tvals) == length(rbase) == length(rpert)
 
     t95 = t95_from_rmed_curve(tvals, rbase; target=0.05)
@@ -352,8 +351,33 @@ function time_errors_normalised(tvals::Vector{Float64}, rbase::Vector{Float64}, 
     good_rel = findall(i -> isfinite(τ[i]) && τ[i] > 0 && τ[i] <= 1.0 && isfinite(Δ[i]), eachindex(τ))
     Err_rel = (length(good_rel) >= 2) ? trapz_logx(τ[good_rel], Δ[good_rel]) : NaN
 
+    # NEW: τqΔ from Δ mass in relevant window (τ<=1)
+    τqΔ = cutoff_tau_from_delta(τ, Δ; q=q_cutoff, τmax=1.0)
+
+    return (t95=t95, τ=τ, Δ=Δ, Err_tot=Err_tot, Err_rel=Err_rel, τqΔ=τqΔ)
+end
+
+function time_errors_normalised(tvals::Vector{Float64}, rbase::Vector{Float64}, rpert::Vector{Float64})
+    @assert length(tvals) == length(rbase) == length(rpert)
+
+    t95 = t95_from_rmed_curve(tvals, rbase; target=0.05)
+    (isfinite(t95) && t95 > 0) || return nothing
+
+    τ = tvals ./ t95
+    Δ = delta_curve(rbase, rpert)
+
+    # Total error: ∫ Δ(τ) dτ   (linear τ)
+    good_all = findall(i -> isfinite(τ[i]) && τ[i] > 0 && isfinite(Δ[i]), eachindex(τ))
+    length(good_all) < 2 && return nothing
+    Err_tot = trapz(τ[good_all], Δ[good_all])
+
+    # Relevant-window error: ∫_{τ<=1} Δ(τ) dτ
+    good_rel = findall(i -> isfinite(τ[i]) && τ[i] > 0 && τ[i] <= 1.0 && isfinite(Δ[i]), eachindex(τ))
+    Err_rel = (length(good_rel) >= 2) ? trapz(τ[good_rel], Δ[good_rel]) : NaN
+
     return (t95=t95, τ=τ, Δ=Δ, Err_tot=Err_tot, Err_rel=Err_rel)
 end
+
 
 # -----------------------------
 # Non-normality proxy: peak transient gain over time grid (base only)
@@ -449,6 +473,7 @@ function eval_base(base::BaseSys, tvals::Vector{Float64}, ωvals::Vector{Float64
     Pdirs = Matrix{Float64}[]
     Err_tot_list = Float64[]
     Err_rel_list = Float64[]
+    τqΔ_list     = Float64[]   # NEW
 
     for k in 1:P_reps
         P = sample_noise_Pdir(S; sparsity_p=P_sparsity, rng=rng)
@@ -460,12 +485,13 @@ function eval_base(base::BaseSys, tvals::Vector{Float64}, ωvals::Vector{Float64
         (isfinite(αp) && αp < -margin) || continue
 
         rpert = rmed_curve(Jp, base.u, tvals)
-        tm = time_errors_normalised(tvals, base.rbase, rpert)
+        tm = time_errors_normalised(tvals, base.rbase, rpert; q_cutoff=q_cutoff)  # MOD
         tm === nothing && continue
 
         push!(Pdirs, P)
         push!(Err_tot_list, tm.Err_tot)
         push!(Err_rel_list, tm.Err_rel)
+        push!(τqΔ_list, tm.τqΔ)  # NEW
     end
 
     length(Pdirs) < 6 && return nothing
@@ -481,7 +507,7 @@ function eval_base(base::BaseSys, tvals::Vector{Float64}, ωvals::Vector{Float64
     # cutoff time tq from sensitivity mass above ω95
     ct = cutoff_time_from_S(ωvals, Sω, ω95; q=q_cutoff)
     tq = ct.tq
-    τq = (isfinite(tq) && tq > 0) ? (tq / base.t95) : NaN
+    τq = (isfinite(tq) && tq > 0) ? (tq / base.t95) : NaN   # this is τq^S
 
     return (
         nP=length(Pdirs),
@@ -491,10 +517,54 @@ function eval_base(base::BaseSys, tvals::Vector{Float64}, ωvals::Vector{Float64
         Sens_rel=Sens_rel,
         ωq=ct.ωq,
         tq=tq,
-        τq=τq,
+        τq=τq,                       # τq^S (unchanged name)
+        τqΔ=meanfinite(τqΔ_list),    # NEW: τq^Δ
         Gpeak=base.Gpeak,
         t95=base.t95
     )
+end
+
+# -----------------------------
+# NEW helper: cutoff τq from Δ(τ) mass in relevant window (τ ∈ (0,1])
+# Uses d log τ (same measure as Err_rel)
+# -----------------------------
+function cutoff_tau_from_delta(τ::Vector{Float64}, Δ::Vector{Float64}; q::Float64=0.5, τmax::Float64=1.0)
+    @assert 0 < q < 1
+    @assert length(τ) == length(Δ)
+
+    idx = findall(i -> isfinite(τ[i]) && τ[i] > 0 && τ[i] <= τmax && isfinite(Δ[i]) && Δ[i] >= 0, eachindex(τ))
+    length(idx) < 3 && return NaN
+
+    τs = τ[idx]
+    Δs = Δ[idx]
+
+    # ensure increasing τ
+    p = sortperm(τs)
+    τs = τs[p]; Δs = Δs[p]
+
+    # total mass on d log τ
+    tot = trapz_logx(τs, Δs)
+    (isfinite(tot) && tot > 0) || return NaN
+
+    # cumulative trapezoids in log τ
+    cum = zeros(Float64, length(τs))
+    for i in 2:length(τs)
+        dlog = log(τs[i]) - log(τs[i-1])
+        cum[i] = cum[i-1] + 0.5*(Δs[i-1] + Δs[i]) * dlog
+    end
+
+    target = q * tot
+    j = findfirst(cum .>= target)
+    isnothing(j) && return NaN
+    j == 1 && return τs[1]
+
+    τ1, τ2 = τs[j-1], τs[j]
+    c1, c2 = cum[j-1], cum[j]
+    if c2 == c1
+        return τ2
+    else
+        return τ1 + (target - c1) * (τ2 - τ1) / (c2 - c1)
+    end
 end
 
 # -----------------------------
@@ -520,19 +590,20 @@ function run_experiment(; S::Int=80, base_reps::Int=60, P_reps::Int=20,
     )
     @info "Built $(length(bases)) stable bases (out of $base_reps attempts)."
 
-    # outputs
     Err_tot  = Vector{Float64}(undef, length(bases))
     Err_rel  = Vector{Float64}(undef, length(bases))
     Sens_tot = Vector{Float64}(undef, length(bases))
     Sens_rel = Vector{Float64}(undef, length(bases))
-    τq       = Vector{Float64}(undef, length(bases))
+    τq       = Vector{Float64}(undef, length(bases))   # τq^S (as before)
+    τqΔ      = Vector{Float64}(undef, length(bases))   # NEW: τq^Δ
     Gpeak    = Vector{Float64}(undef, length(bases))
     t95      = Vector{Float64}(undef, length(bases))
     nPacc    = Vector{Int}(undef, length(bases))
 
     fill!(Err_tot, NaN); fill!(Err_rel, NaN)
     fill!(Sens_tot, NaN); fill!(Sens_rel, NaN)
-    fill!(τq, NaN); fill!(Gpeak, NaN); fill!(t95, NaN)
+    fill!(τq, NaN); fill!(τqΔ, NaN)
+    fill!(Gpeak, NaN); fill!(t95, NaN)
     fill!(nPacc, 0)
 
     Threads.@threads for i in eachindex(bases)
@@ -549,6 +620,7 @@ function run_experiment(; S::Int=80, base_reps::Int=60, P_reps::Int=20,
         Sens_tot[i] = out.Sens_tot
         Sens_rel[i] = out.Sens_rel
         τq[i]       = out.τq
+        τqΔ[i]      = out.τqΔ     # NEW
         Gpeak[i]    = out.Gpeak
         t95[i]      = out.t95
         nPacc[i]    = out.nP
@@ -559,7 +631,8 @@ function run_experiment(; S::Int=80, base_reps::Int=60, P_reps::Int=20,
         bases=bases,
         Err_tot=Err_tot, Err_rel=Err_rel,
         Sens_tot=Sens_tot, Sens_rel=Sens_rel,
-        τq=τq, Gpeak=Gpeak, t95=t95,
+        τq=τq, τqΔ=τqΔ,                # NEW field
+        Gpeak=Gpeak, t95=t95,
         nPacc=nPacc
     )
 end
@@ -567,12 +640,13 @@ end
 # -----------------------------
 # Plot + correlations for the 3 tests
 # -----------------------------
-function summarize_and_plot(res; figsize=(1500, 900))
+function summarize_and_plot(res; figsize=(1200, 700))
     Err_tot  = res.Err_tot
     Err_rel  = res.Err_rel
     Sens_tot = res.Sens_tot
     Sens_rel = res.Sens_rel
-    τq       = res.τq
+    τqS      = res.τq
+    τqΔ      = res.τqΔ
     Gpeak    = res.Gpeak
 
     # 1) Total time error vs total sensitivity
@@ -585,22 +659,32 @@ function summarize_and_plot(res; figsize=(1500, 900))
     ρ2 = (length(m2) >= 6) ? cor(log.(Err_rel[m2]), log.(Sens_rel[m2])) : NaN
     @info "Test 2: cor(log Err_rel, log Sens_rel) = $ρ2 (N=$(length(m2)))"
 
-    # 3) τq vs sensitivity / non-normality
-    # correlate log τq with log Sens_rel and log Gpeak
-    m3a = findall(i -> isfinite(τq[i]) && τq[i] > 0 && isfinite(Sens_rel[i]) && Sens_rel[i] > 0, eachindex(τq))
-    ρ3a = (length(m3a) >= 6) ? cor(log.(τq[m3a]), log.(Sens_rel[m3a])) : NaN
-    @info "Test 3a: cor(log τq, log Sens_rel) = $ρ3a (N=$(length(m3a)))"
+    m3b = findall(i -> isfinite(τqS[i]) && τqS[i] > 0 && isfinite(Gpeak[i]) && Gpeak[i] > 0, eachindex(τqS))
+    ρ3b = (length(m3b) >= 6) ? cor(log.(τqS[m3b]), log.(Gpeak[m3b])) : NaN
+    @info "Test 3b: cor(log τq^S, log Gpeak) = $ρ3b (N=$(length(m3b)))"
 
-    m3b = findall(i -> isfinite(τq[i]) && τq[i] > 0 && isfinite(Gpeak[i]) && Gpeak[i] > 0, eachindex(τq))
-    ρ3b = (length(m3b) >= 6) ? cor(log.(τq[m3b]), log.(Gpeak[m3b])) : NaN
-    @info "Test 3b: cor(log τq, log Gpeak) = $ρ3b (N=$(length(m3b)))"
+    # 4a) NEW: τq^Δ vs τq^S (shape alignment, both in normalised time)
+    m4a = findall(i -> isfinite(τqΔ[i]) && τqΔ[i] > 0 && isfinite(τqS[i]) && τqS[i] > 0, eachindex(τqΔ))
+    ρ4a = (length(m4a) >= 6) ? cor(log.(τqΔ[m4a]), log.(τqS[m4a])) : NaN
+    @info "Test 4a: cor(log τq^Δ, log τq^S) = $ρ4a (N=$(length(m4a)))"
+
+    # 3) τq^S vs sensitivity / non-normality (original)
+    m3a = findall(i -> isfinite(τqS[i]) && τqS[i] > 0 && isfinite(Sens_rel[i]) && Sens_rel[i] > 0, eachindex(τqS))
+    ρ3a = (length(m3a) >= 6) ? cor(log.(τqΔ[m4a]), log.(Sens_rel[m3a])) : NaN
+    @info "Test 3a: cor(log τq^S, log Sens_rel) = $ρ3a (N=$(length(m3a)))"
+
+    # 4b) NEW: τq^Δ vs non-normality proxy
+    m4b = findall(i -> isfinite(τqΔ[i]) && τqΔ[i] > 0 && isfinite(Gpeak[i]) && Gpeak[i] > 0, eachindex(τqΔ))
+    ρ4b = (length(m4b) >= 6) ? cor(log.(τqΔ[m4b]), log.(Gpeak[m4b])) : NaN
+    @info "Test 4b: cor(log τq^Δ, log Gpeak) = $ρ4b (N=$(length(m4b)))"
 
     fig = Figure(size=figsize)
 
     ax1 = Axis(fig[1,1];
-        xscale=log10, yscale=log10,
+        xscale=log10,
+        yscale=log10,
         xlabel="Sens_tot = ∫ S(ω) dω",
-        ylabel="Err_tot = ∫ Δ(τ) d log τ (all τ in grid)",
+        ylabel="Err_tot = ∫ Δ(τ) d log τ (τ=t/t95)",
         title="Test 1: total time error vs total sensitivity"
     )
     scatter!(ax1, Sens_tot[m1], Err_tot[m1], markersize=7)
@@ -608,7 +692,8 @@ function summarize_and_plot(res; figsize=(1500, 900))
         text="cor(log,log) = $(round(ρ1,digits=3))   N=$(length(m1))")
 
     ax2 = Axis(fig[1,2];
-        xscale=log10, yscale=log10,
+        xscale=log10,
+        yscale=log10,
         xlabel="Sens_rel = ∫_{ω≥1/t95} S(ω) dω",
         ylabel="Err_rel = ∫_{τ≤1} Δ(τ) d log τ",
         title="Test 2: relevant-window match"
@@ -618,24 +703,45 @@ function summarize_and_plot(res; figsize=(1500, 900))
         text="cor(log,log) = $(round(ρ2,digits=3))   N=$(length(m2))")
 
     ax3 = Axis(fig[2,1];
-        xscale=log10, yscale=log10,
-        xlabel="Sens_rel",
-        ylabel="τq = tq/t95  (q-fraction cutoff)",
-        title="Test 3a: cutoff time vs sensitivity"
+        xscale=log10,
+        yscale=log10,
+        xlabel="Sens_rel = ∫_{ω≥1/t95} S(ω) dω",
+        ylabel="τq = tq/t95 (cuttof time)",
+        title="Test 3: cutoff time (S) vs sensitivity"
     )
-    scatter!(ax3, Sens_rel[m3a], τq[m3a], markersize=7)
+    scatter!(ax3, Sens_rel[m3a], τqΔ[m4a], markersize=7)
     text!(ax3, 0.05, 0.95, space=:relative, align=(:left,:top),
         text="cor(log,log) = $(round(ρ3a,digits=3))   N=$(length(m3a))")
 
-    ax4 = Axis(fig[2,2];
+    # ax4 = Axis(fig[2,2];
+    #     xscale=log10, yscale=log10,
+    #     xlabel="Gpeak = max_t ||exp(Jt)||_2^2",
+    #     ylabel="τq^S",
+    #     title="Test 3b: cutoff time (S) vs non-normality proxy"
+    # )
+    # scatter!(ax4, Gpeak[m3b], τqS[m3b], markersize=7)
+    # text!(ax4, 0.05, 0.95, space=:relative, align=(:left,:top),
+    #     text="cor(log,log) = $(round(ρ3b,digits=3))   N=$(length(m3b))")
+
+    # ax5 = Axis(fig[3,1];
+    #     xscale=log10, yscale=log10,
+    #     xlabel="τq^S (from S mass)",
+    #     ylabel="τq^Δ (from Δ mass)",
+    #     title="Test 4a: shape alignment (time-quantile vs freq-quantile)"
+    # )
+    # scatter!(ax5, τqS[m4a], τqΔ[m4a], markersize=7)
+    # text!(ax5, 0.05, 0.95, space=:relative, align=(:left,:top),
+        # text="cor(log,log) = $(round(ρ4a,digits=3))   N=$(length(m4a))")
+
+    ax6 = Axis(fig[2,2];
         xscale=log10, yscale=log10,
         xlabel="Gpeak = max_t ||exp(Jt)||_2^2",
         ylabel="τq",
-        title="Test 3b: cutoff time vs non-normality proxy"
+        title="Test 4: error timing vs non-normality proxy"
     )
-    scatter!(ax4, Gpeak[m3b], τq[m3b], markersize=7)
-    text!(ax4, 0.05, 0.95, space=:relative, align=(:left,:top),
-        text="cor(log,log) = $(round(ρ3b,digits=3))   N=$(length(m3b))")
+    scatter!(ax6, Gpeak[m4b], τqΔ[m4b], markersize=7)
+    text!(ax6, 0.05, 0.95, space=:relative, align=(:left,:top),
+        text="cor(log,log) = $(round(ρ4b,digits=3))   N=$(length(m4b))")
 
     display(fig)
     return nothing
@@ -648,16 +754,16 @@ tvals = 10 .^ range(log10(0.01), log10(200.0); length=55)
 ωvals = 10 .^ range(log10(1e-4), log10(1e4); length=80)
 
 res = run_experiment(
-    S=80,              # start moderate; increase later (e.g. 120)
+    S=120,              # start moderate; increase later (e.g. 120)
     base_reps=70,      # how many heterogeneous bases to try to build
-    P_reps=20,         # uncertainty draws per base
+    P_reps=50,         # uncertainty draws per base
     seed=1234,
     tvals=tvals,
     ωvals=ωvals,
     target_alpha=-0.05, # standardise resilience-ish level across bases
     eps_rel=0.20,       # uncertainty magnitude relative to offdiag(Abar)
     margin=1e-3,
-    q_cutoff=0.5        # q for cutoff time tq
+    q_cutoff=0.1        # q for cutoff time tq
 )
 
 summarize_and_plot(res)
