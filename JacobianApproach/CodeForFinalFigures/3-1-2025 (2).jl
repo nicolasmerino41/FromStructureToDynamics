@@ -30,16 +30,6 @@
 #   - Uses exp(tJ) so can be heavy; tune t-grid, P_reps, base_reps if needed.
 ################################################################################
 
-using Random, LinearAlgebra, Statistics, Distributions
-using CairoMakie
-using Base.Threads
-
-# Recommended to avoid BLAS oversubscription when threading this script:
-try
-    BLAS.set_num_threads(1)
-catch
-end
-
 # ------------------------------------------------------------------------------
 # Small helpers
 # ------------------------------------------------------------------------------
