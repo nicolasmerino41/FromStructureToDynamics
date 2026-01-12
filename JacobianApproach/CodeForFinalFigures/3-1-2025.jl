@@ -32,14 +32,6 @@
 #   (NaN), so ε remains constant as desired.
 ################################################################################
 
-using Random, LinearAlgebra, Statistics, Distributions
-using CairoMakie
-using Base.Threads
-import Base.Threads.atomic_add!
-
-# If you see oversubscription (BLAS + Julia threads), uncomment:
-# BLAS.set_num_threads(1)
-
 # ---------------------------
 # Helpers
 # ---------------------------
