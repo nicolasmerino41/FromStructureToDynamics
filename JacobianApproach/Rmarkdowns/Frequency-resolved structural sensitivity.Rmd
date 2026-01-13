@@ -1,0 +1,189 @@
+---
+title: "Frequency-resolved structural sensitivity"
+author: "Nico, Jeff & Núria"
+date: "2026-01-13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+We look at how uncertainty in interactions (structure) changes recovery trajectories.
+
+Consider a stable linear system around equilibrium. 
+$$
+T \dot x = A x
+$$
+where \(T\) is diagonal with positive entries (time scales), and \(A\) is the interaction matrix with \(A_{ii} = -1\). The generalized resolvent is
+$$
+R(\omega) = ( i \omega T - A )^{-1}
+$$
+
+We also choose a weighting matrix \(C\), which in the biomass-weighted version is
+$$
+C = \mathrm{diag}(u^2)
+$$
+
+which relates to treating deviations in species with larger equilibrium biomasses as more important in the quadratic energy.
+
+## 1. The time-domain object: distance-to-equilibrium
+
+Given an initial displacement \(x_0\), the trajectory is \(x(t) = e^{J t} x_0\) where \(J = T^{-1} A\).
+
+The weighted trajectory energy is
+$$
+E(t) = x(t)^\top C x(t)
+$$
+
+To remove dependence on the particular direction of \(x_0\), we consider an ensemble of initial conditions with covariance \(\mathbb{E}[x_0 x_0^\top] = C\). 
+
+$$
+\mathbb{E}[E(t)] = \mathrm{tr}( e^{J t} C e^{J^\top t} )
+$$
+
+This gives us a normalized \"remaining fraction\":
+$$
+y(t) = \frac{\mathrm{tr}( e^{J t} C e^{J^\top t} )}{\mathrm{tr}(C)}
+$$
+
+This is exactly what the biomass-weighted median return rate is, the log-slope summary of this remaining fraction:
+$$
+r_{med}(t) = -\frac{1}{2t} \Big( \log y(t) \Big)
+= -\frac{1}{2t} \Big( \log \mathrm{tr}( e^{J t} C e^{J^\top t}) - \log \mathrm{tr}(C) \Big)
+$$
+Now, we define the recovery time \(t_{95}\) implicitly from \(y(t)\) by
+$$
+y(t_{95}) = 0.05
+$$
+We can also use normalized time \(\tau = t / t_{95}\) when we want comparability across systems.
+
+## 2. The effective return rate
+
+Instead of \(r_{med}(t)\), let's now look at the distance-to-equilibrium object itself. We can call it \(R_{eff}\) and it equals the total integrated trajectory energy:
+$$
+\int_0^{\infty} y(t)\, dt
+$$
+
+This gives us a single number, that we'll call \"effective return rate\" and is defined by
+$$
+\frac{1}{R_{eff}} = 2 \int_0^{\infty} y(t)\, dt,
+\qquad \text{so that} \qquad
+R_{eff} = \frac{1}{2 \int_0^{\infty} y(t)\, dt}
+$$
+
+I believe this means that if the whole decay was a single exponential \(y(t) = e^{-2 r t}\), then
+$$
+2 \int_0^{\infty} e^{-2 r t} dt = \frac{1}{r}
+$$
+so \(R_{eff} = r\). 
+
+Thus, \(R_{eff}\) is a scalar summary of the entire decay curve that does not retain the full time dependence like \(r_{med}(t)\).
+
+## 3. The generalized resolvent
+
+The main benefit of moving to frequency is that integrals of squared trajectory magnitude can be written as integrals of squared transfer magnitude (Parseval's theorem)
+
+If we write the system as a forced linear system,
+$$
+T \dot x = A x + \xi(t)
+$$
+its Fourier transform satisfies
+$$
+\hat x(\omega) = R(\omega) \hat \xi(\omega)
+$$
+
+If \(\xi\) is matches the same \(C\) we used in time, then we get an identity of the form
+$$
+\int_0^{\infty} \mathbb{E}[x(t)^\top C x(t)]\, dt
+\;\propto\;
+\int_{-\infty}^{\infty} \mathrm{tr}\big( R(\omega)\, C_{\xi}\, R(\omega)^{\dagger} \big)\, d\omega
+$$
+where \(\dagger\) is conjugate transpose and \(C_{\xi}\) is the forcing covariance in frequency. 
+
+This is why the generalized resolvent matters. It converts an integrated time-domain energy statement into an integrated frequency-domain magnitude statement.
+
+## 4. Structural uncertainty: the sensitivity spectrum and the role of R(\(\omega\)) and R(\(\omega\))PR(\(\omega\))
+
+We model interaction uncertainty as
+$$
+A \mapsto A + \varepsilon P
+$$
+where \(P\) is a direction (uncertainty pattern) and \(\varepsilon\) sets its magnitude.
+
+A first-order expansion gives us
+$$
+R_{\varepsilon}(\omega) - R(\omega) \approx \varepsilon\, R(\omega) P R(\omega)
+$$
+
+Thus, the frequency-resolved sensitivity to uncertainty direction \(P\) is naturally based on the operator \(R P R\). 
+Because we're also considering the biomass-weighted \(C\), sensitivity at a certain \(\omega\) can be defined as
+$$
+S(\omega;P) =
+\varepsilon^2\,
+\frac{\| R(\omega) P R(\omega) U \|_F^2}{\mathrm{tr}(C)},
+\qquad \text{with} \qquad U U^\top = C
+$$
+If \(C = \mathrm{diag}(u^2)\) as it has been so far, then \(U = \mathrm{diag}(u)\).
+
+Given \(S(\omega;P)\), can now define two sensitivities
+
+- Typical sensitivity: average \(S(\omega;P)\) over an ensemble of \(P\) (noise uncertainty).
+
+- Worst-case sensitivity: maximize over \(P\), which yields a worst-case bound that will be controled by the singular values of \(R(\omega)\) and \(R(\omega)U\).
+
+## 5. The cutoff frequency \( \omega_c \)
+
+Let's consider a cutoff frequency linked to the minimal time to get divergence.
+
+We can define it in two different ways
+
+### 5.1 Picking \(\omega_c\) from \(\rho(A_\omega)\) (better)
+
+The more mechanistic way to define the cutoff is to identify when indirect interaction pathways become important.
+
+We can factor the resolvent as
+$$
+R(\omega) = ( i \omega T - A)^{-1}
+= (I - A_{\omega})^{-1} (i \omega T + I)^{-1}
+$$
+with
+$$
+A_{\omega} = A (i \omega T + I)^{-1}
+$$
+
+The term \((i \omega T + I)^{-1}\) behaves like a classic low-pass filter. 
+
+And the term \((I - A_{\omega})^{-1}\) expands as a Neumann series when \(\rho(A_{\omega}) < 1\):
+$$
+(I - A_{\omega})^{-1} = I + A_{\omega} + A_{\omega}^2 + \cdots
+$$
+
+This means:
+
+- \(I\) is the direct (no-interaction) response.
+
+- \(A_{\omega}\) is one-step interaction (direct effects).
+
+- \(A_{\omega}^2, A_{\omega}^3, \dots\) are the indirect effects.
+
+A frequency cutoff can therefore be defined from a collectivity index such that \(K(\omega) = \rho(A_{\omega})\) or \(K(\omega) = \|A_{\omega}\|\). The cutoff \(\omega_c\) is where indirect effects cease to be negligible (for example, where \(K(\omega)\) crosses  1), and \(t_c = 1/\omega_c\) is then the earliest timescale where indirect pathways can matter.
+
+Broadly speaking, the cutoff frequency is meant to locate in time when indirect effects become dynamically relevant in a mechanistically interpretable way.
+
+### 5.2 Picking \(\omega_c\) from \(S(\omega)\) (old idea)
+
+We can also do the following:
+
+- Define a relevant frequency threshold \(\omega_{95} = 1/t_{95}\).
+
+- Look at how sensitivity accumulates over frequencies above \(\omega_{95}\).
+
+- Define \(\omega_q\) such that a fraction \(q\) of the relevant sensitivity is accumulated by \(\omega_q\):
+$$
+\frac{\int_{\omega_{95}}^{\omega_q} S(\omega)\, d\omega}{\int_{\omega_{95}}^{\infty} S(\omega)\, d\omega} = q
+$$
+Then bring it back to time-domain by \(t_q = 1/\omega_q\) and \(\tau_q = t_q/t_{95}\).
+
+Why is this useful?
+If most sensitivity sits at high frequencies, then \(\omega_q\) is large and \(t_q\) is small, meaning trajectories are expected to separate early (in normalized time). If sensitivity sits at lower frequencies, separation is expected later, maybe in slow, not-so-relevant times.
