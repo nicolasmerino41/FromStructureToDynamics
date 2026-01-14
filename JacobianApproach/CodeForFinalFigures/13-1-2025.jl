@@ -554,7 +554,7 @@ end
 
 function build_bases(; S::Int, base_reps::Int, seed::Int,
     tvals::Vector{Float64},
-    u_mean::Float64=1.0, u_cv::Float64=1.0,
+    u_mean::Float64=1.0, u_cv::Float64=0.5,
     connectance_rng=(0.03, 0.12),
     trophic_align_rng=(0.55, 0.98),
     reciprocity_rng=(0.00, 0.20),
@@ -826,6 +826,9 @@ function summarize_and_plot(res; figsize=(1700, 1100), q_align=0.5)
     ρ7, N7, m7 = corr_loglog(res.Gpeak, res.τqΔ)
     @info "Error timing vs non-normality: τqΔ vs Gpeak: cor(log,log) = $ρ7 (N=$N7)"
 
+    ρ8, N8, m8 = corr_loglog(res.Sens_rel, res.ωc)
+    @info "Comparability check: τc vs K0: cor(log,log) = $ρ8 (N=$N8)"
+
     fig = Figure(size=figsize)
 
     axA = Axis(fig[1,1], xscale=log10, yscale=log10,
@@ -912,6 +915,17 @@ function summarize_and_plot(res; figsize=(1700, 1100), q_align=0.5)
         ylabel="S(ω_star; P)",
         title="I) Typical vs aligned vs bound at ω_star"
     )
+
+    axJ = Axis(
+        fig[4,1], xscale=log10, yscale=log10,
+        xlabel="Sens_rel = ∫_{ω≥1/t95} S(ω) dω",
+        ylabel="ωc (K(ω)=1 cutoff)",
+        title="J) Sens_rel Vs earlier cutoff frequency based on K(ω)"
+    )
+    scatter!(axJ, res.Sens_rel[m8], res.ωc[m8], markersize=7)
+    text!(axJ, 0.05, 0.95, space=:relative, align=(:left,:top),
+        text="cor(log,log)=$(round(ρ8,digits=3))  N=$N8")
+
     if res.example !== nothing
         out = res.example.out
         base = res.example.base
@@ -959,7 +973,7 @@ function summarize_and_plot(res; figsize=(1700, 1100), q_align=0.5)
     axJ = Axis(fig2[1,1], xscale=log10, yscale=log10,
         xlabel="K0 = ρ(|A|)",
         ylabel="τc = (1/ωc)/t95",
-        title="NEW) Is cutoff comparable across systems?"
+        title="Is cutoff comparable across systems?"
     )
     scatter!(axJ, res.K0[m8], res.τc[m8], markersize=7)
     text!(axJ, 0.05, 0.95, space=:relative, align=(:left,:top),
