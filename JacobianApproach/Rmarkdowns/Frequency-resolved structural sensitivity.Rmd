@@ -27,7 +27,7 @@ $$
 
 which relates to treating deviations in species with larger equilibrium biomasses as more important in the quadratic energy.
 
-## 1. The time-domain object: distance-to-equilibrium
+## 1. The distance-to-equilibrium object
 
 Given an initial displacement \(x_0\), the trajectory is \(x(t) = e^{J t} x_0\) where \(J = T^{-1} A\).
 
@@ -103,7 +103,7 @@ where \(\dagger\) is conjugate transpose and \(C_{\xi}\) is the forcing covarian
 
 This is why the generalized resolvent matters. It converts an integrated time-domain energy statement into an integrated frequency-domain magnitude statement.
 
-## 4. Structural uncertainty: the sensitivity spectrum and the role of R(\(\omega\)) and R(\(\omega\))PR(\(\omega\))
+## 4. Structural uncertainty and the role of R(\(\omega\)) and R(\(\omega\))PR(\(\omega\))
 
 We model interaction uncertainty as
 $$
@@ -134,7 +134,7 @@ Given \(S(\omega;P)\), can now define two sensitivities
 
 ## 5. The cutoff frequency \( \omega_c \)
 
-Let's consider a cutoff frequency linked to the minimal time to get divergence.
+Let's consider a cutoff frequency linked to the minimal time to get divergence. Or in other words, the minimal time at which structural information may matter.
 
 We can define it in two different ways
 
@@ -167,9 +167,7 @@ This means:
 
 - \(A_{\omega}^2, A_{\omega}^3, \dots\) are the indirect effects.
 
-A frequency cutoff can therefore be defined from a collectivity index such that \(K(\omega) = \rho(A_{\omega})\) or \(K(\omega) = \|A_{\omega}\|\). The cutoff \(\omega_c\) is where indirect effects cease to be negligible (for example, where \(K(\omega)\) crosses  1), and \(t_c = 1/\omega_c\) is then the earliest timescale where indirect pathways can matter.
-
-Broadly speaking, the cutoff frequency is meant to locate in time when indirect effects become dynamically relevant in a mechanistically interpretable way.
+A frequency cutoff can therefore be defined from a "collectivity" index such that \(K(\omega) = \rho(A_{\omega})\). The cutoff \(\omega_c\) is where indirect effects stop being negligible (for example, when \(K(\omega)\) crosses  1), and then \(t_c = 1/\omega_c\) is the earliest time at which indirect pathways can matter.
 
 ### 5.2 Picking \(\omega_c\) from \(S(\omega)\) (old idea)
 
@@ -187,3 +185,97 @@ Then bring it back to time-domain by \(t_q = 1/\omega_q\) and \(\tau_q = t_q/t_{
 
 Why is this useful?
 If most sensitivity sits at high frequencies, then \(\omega_q\) is large and \(t_q\) is small, meaning trajectories are expected to separate early (in normalized time). If sensitivity sits at lower frequencies, separation is expected later, maybe in slow, not-so-relevant times.
+
+## 6. Formal link between \(r_{med}(t)\) and \(R_{eff}\)
+
+Here I give an exact mathematical relation between \(r_{med}(t)\) and \(R_{eff}\).
+
+### 6.1 Common backbone: weighted energy \(y(t)\)
+
+Let \(J\) be the stable Jacobian, \(E(t)=e^{tJ}\) and a positive diagonal weight matrix \(C\). The normalised weighted trajectory energy is
+$$
+y(t)
+\;=\;
+\frac{\mathrm{tr}\big(E(t)\,C\,E(t)^{\top}\big)}{\mathrm{tr}(C)}
+$$
+Then \(y(0)=1\), \(y(t)>0\), and for stable \(J\), \(y(t)\to 0\) as \(t\to\infty\).
+
+Thus, our biomass-weighted median return rate is exactly
+$$
+r_{med}(t)
+\;=\;
+-\frac{1}{2t}\,\log\big(y(t)\big)
+$$
+
+### 6.2 Instantaneous energy decay rate
+
+The instantaneous energy decay rate is
+$$
+r_{inst}(t)
+\;=\;
+-\frac{1}{2}\,\frac{d}{dt}\log\big(y(t)\big)
+$$
+Because \(y(0)=1\), we can integrate \(d\log y / dt\) from \(0\) to \(t\) to obtain
+$$
+\log y(t)
+\;=\;
+-2\int_0^t r_{inst}(s)\,ds
+$$
+Substituting into the definition of \(r_{med}(t)\) yields an exact identity:
+$$
+r_{med}(t)
+\;=\;
+\frac{1}{t}\int_0^t r_{inst}(s)\,ds
+$$
+Thus, \(r_{med}(t)\) is the uniform in time average of the instantaneous decay rate over the interval \([0,t]\).
+
+### 3.3 Defining \(R_{eff}\) from the same \(y(t)\)
+
+In Section 2, I already showed that
+$$
+R_{eff}
+\;=\;
+\frac{1}{2\int_0^{\infty} y(t)\,dt}
+$$
+
+### 6.4 Exact relation
+
+Using \(r_{inst}(t)=-(1/2)\,d\log y(t)/dt\), we have
+$$
+\frac{d}{dt}y(t)
+\;=\;
+-2\,r_{inst}(t)\,y(t)
+$$
+Integrating both sides from \(0\) to \(\infty\) gives
+$$
+\int_0^{\infty} r_{inst}(t)\,y(t)\,dt
+\;=\;
+-\frac{1}{2}\int_0^{\infty} y'(t)\,dt
+\;=\;
+\frac{1}{2}\big(y(0)-y(\infty)\big)
+\;=\;
+\frac{1}{2}
+$$
+Therefore,
+$$
+R_{eff}
+\;=\;
+\frac{1}{2\int_0^{\infty} y(t)\,dt}
+\;=\;
+\frac{\int_0^{\infty} r_{inst}(t)\,y(t)\,dt}{\int_0^{\infty} y(t)\,dt}
+$$
+Thus, \(R_{eff}\) is a single scalar that averages across all times, with weights proportional to \(y(t)\) whereas \(r_{med}(t)\) is a function of time and depends on a finite averaging horizon \([0,t]\)
+
+### 6.5 When are they approximately equal?
+
+If \(y(t)\) is approximately a single exponential,
+$$
+y(t)\approx e^{-2rt}
+$$
+then \(r_{inst}(t)=r\) is constant, and
+$$
+r_{med}(t)=r
+\quad\text{for all }t,\qquad
+R_{eff}=\frac{1}{2\int_0^{\infty} e^{-2rt}dt}=r
+$$
+Hence, exact equality between \(R_{eff}\) and \(r_{med}(t)\) will only occur when the energy decay is effectively a single rate.
