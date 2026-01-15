@@ -543,7 +543,7 @@ end
 # -----------------------------
 # Base systems
 # -----------------------------
-struct BaseSys
+struct BaseSys1
     u::Vector{Float64}
     Abar::Matrix{Float64}   # diag -1
     rbase::Vector{Float64}
@@ -562,7 +562,7 @@ function build_bases(; S::Int, base_reps::Int, seed::Int,
     target_alpha::Float64=-0.05,
     eps_rel::Float64=0.20
 )
-    bases = BaseSys[]
+    bases = BaseSys1[]
     for b in 1:base_reps
         rng = MersenneTwister(seed + 10007*b)
 
@@ -592,7 +592,7 @@ function build_bases(; S::Int, base_reps::Int, seed::Int,
 
         Gpk = peak_transient_gain(J, tvals)
 
-        push!(bases, BaseSys(u, Abar, rbase, t95, eps, Gpk))
+        push!(bases, BaseSys1(u, Abar, rbase, t95, eps, Gpk))
     end
     return bases
 end
@@ -606,7 +606,7 @@ end
 # - compute τqS from sensitivity mass
 # - compute K(ω), ωc, τc, and static K0
 # -----------------------------
-function eval_base(base::BaseSys, tvals::Vector{Float64}, ωvals::Vector{Float64};
+function eval_base(base::BaseSys1, tvals::Vector{Float64}, ωvals::Vector{Float64};
     P_reps::Int=20,
     P_sparsity::Float64=1.0,
     margin::Float64=1e-3,
@@ -703,7 +703,8 @@ end
 # -----------------------------
 # Run experiment across many bases (threaded over bases)
 # -----------------------------
-function run_experiment(; S::Int=70, base_reps::Int=70, P_reps::Int=18,
+function run_experiment(
+    ; S::Int=70, base_reps::Int=70, P_reps::Int=18,
     seed::Int=1234,
     tvals = 10 .^ range(log10(0.01), log10(200.0); length=45),
     ωvals = 10 .^ range(log10(1e-4), log10(1e4); length=80),
