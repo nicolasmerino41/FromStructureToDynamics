@@ -814,7 +814,6 @@ function plot_efficiency_results(res; figsize=(1700, 1400))
     text!(ax6, 0.05, 0.95, space=:relative, align=(:left,:top),
           text="cor(log Err_tot, log Sens_tot) = $(round(ρ_tot,digits=3))   N=$(length(mE2))")
 
-    # NEW panel: box approximation test
     ax7 = Axis(fig[3,1];
         xscale=log10, yscale=log10,
         xlabel="S(0) * ωc",
