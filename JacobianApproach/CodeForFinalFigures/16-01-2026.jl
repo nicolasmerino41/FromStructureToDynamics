@@ -440,7 +440,7 @@ end
 # -----------------------------
 # Base system container and builder
 # -----------------------------
-struct BaseSys
+struct BaseSys2
     u::Vector{Float64}
     Abar::Matrix{Float64}           # -I + A
     eps_struct::Float64             # perturbation magnitude on Abar
@@ -463,7 +463,7 @@ function build_bases(; S::Int=80, base_reps::Int=40, seed::Int=1234,
     # C0 choice
     C0_mode::Symbol=:u2       # :u2 or :I
 )
-    bases = BaseSys[]
+    bases = BaseSys2[]
     for b in 1:base_reps
         rng = MersenneTwister(seed + 10007*b)
 
@@ -503,7 +503,7 @@ function build_bases(; S::Int=80, base_reps::Int=40, seed::Int=1234,
         K0 = maximum(abs.(eigvals(Matrix(A))))
         isfinite(K0) || continue
 
-        push!(bases, BaseSys(u, Abar, eps_struct, C0diag, K0))
+        push!(bases, BaseSys2(u, Abar, eps_struct, C0diag, K0))
     end
     return bases
 end
@@ -517,7 +517,7 @@ end
 # - Compute ωc0 (baseline half-power) and energetic band [ωL, ωH]
 # - Compute interaction metrics at ωc0, ωL, ωH
 # -----------------------------
-function eval_base(base::BaseSys, ωvals::Vector{Float64};
+function eval_base(base::BaseSys2, ωvals::Vector{Float64};
     P_reps::Int=12,
     P_sparsity::Float64=1.0,
     margin::Float64=1e-4,
