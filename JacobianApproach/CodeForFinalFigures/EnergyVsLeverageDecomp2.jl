@@ -599,7 +599,7 @@ end
 
 function build_bases(; S::Int=80, base_reps::Int=40, seed::Int=1234,
     # u distribution
-    u_mean::Float64=1.0, u_cv::Float64=0.5,
+    u_mean::Float64=1.0, u_cv::Float64=0.0,
     # trophic generator heterogeneity
     connectance_rng=(0.03, 0.12),
     trophic_align_rng=(0.55, 0.98),
