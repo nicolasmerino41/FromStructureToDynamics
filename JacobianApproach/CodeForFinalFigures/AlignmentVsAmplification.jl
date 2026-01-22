@@ -3,7 +3,7 @@
 #
 # Goal (simple, publishable logic):
 #   1) Show that timescale–strength alignment organizes WHEN structural fragility lives
-#      (location of m(w) = e(w)*L(w)).
+#      (location of m(w) = e(w)*L(w)).https://www.canva.com/
 #   2) Show that amplification / non-normality organizes HOW MUCH fragility you get
 #      (magnitude of energy-weighted leverage), while holding alignment ~fixed.
 #
