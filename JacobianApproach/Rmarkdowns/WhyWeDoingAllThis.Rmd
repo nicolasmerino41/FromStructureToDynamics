@@ -129,7 +129,7 @@ We want a formal first-order description of how (V) changes.
 
 ## 6.1 Frequency-local fractional sensitivity
 
-The meeting notes highlight a key frequency-local term. Define
+Define
 $$
 g(\omega;P) \approx
 \frac{2\,\mathrm{Re}\,\mathrm{tr}\bigl(R(\omega)\,P\,\hat{C}(\omega)\bigr)}
