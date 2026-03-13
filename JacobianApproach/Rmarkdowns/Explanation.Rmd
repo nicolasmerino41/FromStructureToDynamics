@@ -1,0 +1,286 @@
+---
+title: "Explanation"
+author: "Nico, Jeff & Núria"
+date: "2026-03-13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Structural Sensitivity as a Timescale-Dependent Dynamical Property
+
+## 1. Linearized community dynamics
+
+Consider a community of \(N\) species with equilibrium abundances \(N^*\). Let \(x(t)\) denote the vector of small deviations from equilibrium,
+
+$$
+x(t) = N(t) - N^*.
+$$
+
+Linearizing the full nonlinear dynamics around equilibrium yields
+
+$$
+T \frac{dx}{dt} = (-I + A) x,
+$$
+
+where:
+
+- \(A\) is the interaction matrix evaluated at equilibrium,
+- \(I\) is the identity matrix,
+- \(T = \mathrm{diag}(\tau_1, \dots, \tau_N)\) is a diagonal matrix of species-specific timescales.
+
+The matrix T encodes intrinsic response speeds. Small \(\tau_i\) correspond to fast species, large \(\tau_i\) to slow species.
+
+Defining the Jacobian
+
+$$
+J = T^{-1}(-I + A),
+$$
+
+the dynamics can be written as
+
+$$
+\frac{dx}{dt} = J x.
+$$
+
+The solution for a given initial displacement x(0) is
+
+$$
+x(t) = e^{J t} x(0),
+$$
+
+where \(e^{J t}\) is the matrix exponential and acts as the propagator of deviations.
+
+---
+
+## 2. Structural uncertainty
+
+Suppose the interaction matrix is not known exactly. We model structural uncertainty as
+
+$$
+A \to A + \varepsilon P,
+$$
+
+where:
+
+- \(\varepsilon > 0\) is the magnitude of uncertainty,
+- P is a fixed matrix specifying the direction and structure of interaction errors.
+
+The perturbed Jacobian becomes
+
+$$
+J' = T^{-1}(-I + A + \varepsilon P) = J + \varepsilon T^{-1} P.
+$$
+
+Let x'(t) denote the perturbed trajectory satisfying
+
+$$
+\frac{dx'}{dt} = J' x'.
+$$
+
+We define the trajectory error
+
+$$
+u(t) = x'(t) - x(t).
+$$
+
+The object of interest is the accumulated trajectory deviation
+
+$$
+\int_0^{\infty} \|u(t)\|^2 dt,
+$$
+
+which quantifies structural sensitivity.
+
+---
+
+## 3. First-order expansion of trajectory error
+
+Using standard perturbation theory for linear systems,
+
+$$
+e^{(J + \varepsilon K)t}
+= e^{J t}
++ \varepsilon \int_0^t e^{J (t-s)} K e^{J s} ds
++ O(\varepsilon^2),
+$$
+
+with \(K = T^{-1}P\), we obtain at first order
+
+$$
+u(t)
+\approx
+\varepsilon
+\int_0^t
+e^{J (t-s)} T^{-1}P e^{J s} x(0) ds.
+$$
+
+Thus structural error is injected through P and propagated through the unperturbed dynamics \(e^{Jt}\).
+
+---
+
+## 4. Frequency-domain representation
+
+To analyze timescale structure, we take the Fourier transform in time. Let
+
+$$
+\hat{x}(\omega) = \int_{-\infty}^{\infty} x(t) e^{-i\omega t} dt.
+$$
+
+Applying Fourier transform to the linear equation
+
+$$
+T \frac{dx}{dt} = (-I + A) x,
+$$
+
+yields
+
+$$
+(i\omega T - A) \hat{x}(\omega) = \hat{f}(\omega),
+$$
+
+where \(\hat{f}(\omega)\) represents forcing or initial-condition contributions.
+
+The resolvent operator is defined as
+
+$$
+R_\omega = (i\omega T - A)^{-1}.
+$$
+
+It maps frequency components of forcing into frequency components of response:
+
+$$
+\hat{x}(\omega) = R_\omega \hat{f}(\omega).
+$$
+
+The resolvent is a frequency-resolved gain operator.
+
+---
+
+## 5. Sensitivity spectrum
+
+From the first-order expansion, the Fourier transform of the trajectory error satisfies
+
+$$
+\hat{u}(\omega)
+\sim
+\varepsilon R_\omega P R_\omega \hat{x}_0,
+$$
+
+where \(\hat{x}_0\) encodes initial displacement structure.
+
+Define the structured sensitivity spectrum
+
+$$
+S_P(\omega) = \| R_\omega P R_\omega \|.
+$$
+
+This function measures amplification of structural uncertainty of type P at frequency \(\omega\).
+
+In contrast, the intrinsic gain spectrum
+
+$$
+S(\omega) = \| R_\omega \|
+$$
+
+measures worst-case amplification independent of perturbation direction.
+
+Emergent system timescales are defined as frequencies at which \(S(\omega)\) or \(S_P(\omega)\) achieve local maxima or contribute significantly to integrated sensitivity.
+
+The system does not possess a single intrinsic timescale; instead it possesses a sensitivity spectrum across frequencies.
+
+---
+
+## 6. Relation to eigenvalues
+
+Let \(\lambda_k\) denote eigenvalues of J.
+
+- \(Re(\lambda_k)\) determines asymptotic decay.
+- \(Im(\lambda_k)\) determines intrinsic rotation rates.
+
+For normal systems with homogeneous T,
+
+$$
+R_\omega
+= V (i\omega I - \Lambda)^{-1} V^{-1},
+$$
+
+and resolvent peaks align with imaginary parts of eigenvalues.
+
+For non-normal systems, eigenvectors are not orthogonal and transient amplification may occur away from eigenvalue frequencies. In such cases, peaks of \(S(\omega)\) are not directly predictable from eigenvalues alone.
+
+Thus eigenvalues govern asymptotic stability, whereas the resolvent governs finite-time, timescale-dependent amplification.
+
+---
+
+## 7. Stochastic forcing and variability
+
+Consider now stochastic forcing
+
+$$
+T \frac{dx}{dt} = (-I + A) x + \eta(t),
+$$
+
+where \(\eta(t)\) is zero-mean noise with covariance matrix C_0:
+
+$$
+\mathbb{E}[\eta(t) \eta(s)^T] = C_0 \delta(t-s).
+$$
+
+In frequency domain, the covariance of the response is
+
+$$
+\hat{C}_\omega
+= R_\omega C_0 R_\omega^{\dagger}.
+$$
+
+The expected squared deviation is
+
+$$
+\mathbb{E} \|x(t)\|^2
+= \mathrm{tr}(C),
+$$
+
+where \(C\) is the covariance matrix of \(x(t)\).
+
+Total variability is
+
+$$
+V = \int_{-\infty}^{\infty}
+\mathrm{tr}(\hat{C}_\omega) d\omega.
+$$
+
+Perturbing \(A \to A + \varepsilon P\) yields
+
+$$
+V'
+=
+V
++
+\varepsilon
+\int
+2 \, \mathrm{Re}
+\, \mathrm{tr}(R_\omega P \hat{C}_\omega)
+\, d\omega
++ O(\varepsilon^2).
+$$
+
+Thus classical noise-induced variability and structural sensitivity share the same dynamical backbone: amplification through \(R_\omega\).
+
+---
+
+## 8. Interpretation
+
+The framework decomposes structural sensitivity into three interacting components:
+
+1. Magnitude of uncertainty: \(\varepsilon\).
+2. Structural direction of uncertainty: \(P\).
+3. Dynamical processing of uncertainty: \(R_\omega\).
+
+Species-level timescales T determine intrinsic reaction speeds. Interaction matrix A determines redistribution of deviations. Their interaction generates a frequency-dependent gain function.
+
+Structural robustness is therefore not a static network property but a dynamical, timescale-dependent property characterized by the sensitivity spectrum \(S_P(\omega)\).
+
+Ecological interpretation requires comparison between emergent sensitivity frequencies and externally relevant perturbation timescales.
