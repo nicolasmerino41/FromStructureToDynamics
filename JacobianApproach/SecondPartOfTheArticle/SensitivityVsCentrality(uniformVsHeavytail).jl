@@ -624,7 +624,7 @@ function main()
     # User-facing parameters
     # -------------------------
     S = 100
-    nrep = 5
+    nrep = 25
     connectance = 0.12
     IS = 0.22
     ts_sigma_log = 0.15
