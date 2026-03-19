@@ -259,7 +259,7 @@ function proof_progressive_hubset_creation()
         xlabel = "frequency ω",
         ylabel = "S_high(ω) / S_low(ω)",
         xscale = log10,
-        yscale = log10)
+        yscale = identity)
 
     for (idx, lev) in enumerate(levels)
         lbl = @sprintf("rewiring = %.2f  (Gini = %.2f)", lev, indeg_ginis[idx])
@@ -276,7 +276,7 @@ function proof_progressive_hubset_creation()
         xlabel = "frequency ω",
         ylabel = "S_P(ω)",
         xscale = log10,
-        yscale = log10)
+        yscale = identity)
 
     for (idx, lev) in enumerate(levels)
         lbl = @sprintf("high class, %.2f", lev)
