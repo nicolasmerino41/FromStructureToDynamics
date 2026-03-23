@@ -34,7 +34,7 @@ const CONNECTANCE = 0.12
 const IS = 0.22
 const STABILITY_MARGIN = 0.1
 
-const OMEGAS = exp.(range(log(1e-2), log(1e2), length = 220))
+const OMEGAS = exp.(range(log(1e-3), log(1e3), length = 220))
 
 # Five levels of timescale heterogeneity
 # t_i = exp(σ z_i - σ^2/2), with z_i fixed within a row
@@ -172,7 +172,8 @@ function build_profile_grid()
             σ = TS_SIGMAS[c]
             t = timescales_from_template(z, σ)
             T = Diagonal(t)
-            A = stabilize_A(A_raw, T; margin = STABILITY_MARGIN)
+            # A = stabilize_A(A_raw, T; margin = STABILITY_MARGIN)
+            A = A_raw
             profiles[r, c] = intrinsic_profile(A, T, OMEGAS)
         end
     end
