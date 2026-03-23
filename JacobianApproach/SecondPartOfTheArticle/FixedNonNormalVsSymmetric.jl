@@ -125,7 +125,10 @@ function feedforward_chain_offdiag(n::Int)
     for i in 1:n-1
         A[i, i+1] = 1.0
     end
-    A
+    for i in 1:n-2
+        A[i, i+2] = 1.0
+    end
+    return A
 end
 
 # -------------------------
