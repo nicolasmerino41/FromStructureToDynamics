@@ -1,6 +1,6 @@
 using LinearAlgebra
 using Statistics
-using Random
+using Random, Printf
 using CairoMakie
 
 # ============================================================
@@ -286,5 +286,5 @@ function proof_progressive_hubset_creation()
 
     display(fig)
 end
-using Printf
+
 proof_progressive_hubset_creation()
