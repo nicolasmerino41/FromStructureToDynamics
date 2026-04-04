@@ -10,10 +10,9 @@ using StatsBase
 # Smoother deterministic transition from regular graph to
 # hub-set graph.
 #
-# Changes relative to previous version:
-#   1) rewiring is distributed more gradually across sources
-#   2) new hub targets are assigned in a rotating round-robin way
-#      so λ = 0.25 does not already look too close to λ = 1
+# Added:
+#   - one row for central-class RPR profiles
+#   - one row for satellite-class RPR profiles
 # ============================================================
 Random.seed!(1234)
 
@@ -29,15 +28,19 @@ function stabilize_A(A::AbstractMatrix{<:Real}; margin::Float64 = STABILITY_MARG
     return Matrix(A) - shift * I, shift
 end
 
-function structured_spectrum(A::AbstractMatrix{<:Real}, P::AbstractMatrix{<:Real}, ωs::AbstractVector{<:Real})
+function structured_spectrum(A::AbstractMatrix{<:Real},
+                             P::AbstractMatrix{<:Real},
+                             ωs::AbstractVector{<:Real},
+                             T::AbstractMatrix{<:Real})
     n = size(A, 1)
     Icomplex = Matrix{ComplexF64}(I, n, n)
     Ac = ComplexF64.(A)
     Pc = ComplexF64.(P)
+    Tc = ComplexF64.(T)
     out = zeros(Float64, length(ωs))
 
     for (k, ω) in pairs(ωs)
-        F = factorize(im * ω .* Icomplex - Ac)
+        F = factorize(im * ω .* Tc - Ac)
         R = F \ Icomplex
         out[k] = opnorm(R * Pc * R, 2)
     end
@@ -73,8 +76,9 @@ function perturbation_operator_class_allP(n::Int, C::AbstractVector{<:Integer})
         end
     end
 
-    M / norm(M)
+    return M / norm(M)
 end
+
 function perturbation_operator_class(A::AbstractMatrix{<:Real}, C::AbstractVector{<:Integer}; tol::Float64 = 0.0)
     n = size(A, 1)
     M = zeros(Float64, n, n)
@@ -122,15 +126,6 @@ end
 # ------------------------------------------------------------
 # Smoother rewiring rule
 # ------------------------------------------------------------
-# Idea:
-#   - for each non-hub source, compute the maximum number of
-#     rewires possible toward the hub set
-#   - assign rewires smoothly using floor + distributed remainder
-#   - assign new hub targets in rotating order across hubs
-#
-# This avoids the old abrupt jump where λ=0.25 already looked
-# nearly like λ=1 for one or two hub species.
-# ------------------------------------------------------------
 function rewire_toward_hubset_smooth(B0::BitMatrix, hubs::Vector{Int}, λ::Float64)
     n = size(B0, 1)
     B = copy(B0)
@@ -139,7 +134,6 @@ function rewire_toward_hubset_smooth(B0::BitMatrix, hubs::Vector{Int}, λ::Float
     nonhubs = [i for i in 1:n if !(i in H)]
     ns = length(nonhubs)
 
-    # First pass: compute max rewires per source
     max_rewires = Dict{Int, Int}()
     for i in nonhubs
         targets = [j for j in 1:n if B[i, j]]
@@ -148,8 +142,6 @@ function rewire_toward_hubset_smooth(B0::BitMatrix, hubs::Vector{Int}, λ::Float
         max_rewires[i] = min(length(current_nonhub_targets), length(available_hubs))
     end
 
-    # Desired smooth number of rewires per source
-    # base + one extra for a fraction of sources
     nrewire_per_source = Dict{Int, Int}()
     remainders = Float64[]
     for i in nonhubs
@@ -159,23 +151,18 @@ function rewire_toward_hubset_smooth(B0::BitMatrix, hubs::Vector{Int}, λ::Float
         push!(remainders, x - base)
     end
 
-    # Distribute fractional remainders gradually across sources
-    # deterministically: sources with largest remainder get +1 first
     order = sortperm(remainders, rev = true)
     for idx in order
         i = nonhubs[idx]
         x = λ * max_rewires[i]
         frac = x - floor(Int, x)
         if frac > 0
-            # use a deterministic threshold based on source rank
-            # so that smaller λ values remain visibly earlier-stage
             if frac >= 0.5
                 nrewire_per_source[i] += 1
             end
         end
     end
 
-    # Second pass: perform rewiring with rotating hub assignment
     for (src_idx, i) in enumerate(nonhubs)
         r = nrewire_per_source[i]
         r == 0 && continue
@@ -183,7 +170,6 @@ function rewire_toward_hubset_smooth(B0::BitMatrix, hubs::Vector{Int}, λ::Float
         targets = [j for j in 1:n if B[i, j]]
         current_nonhub_targets = [j for j in targets if !(j in H) && j != i]
 
-        # rotate hub order depending on source index
         rotated_hubs = [hubs[((k + src_idx - 2) % length(hubs)) + 1] for k in 1:length(hubs)]
         available_hubs = [h for h in rotated_hubs if h != i && !B[i, h]]
 
@@ -215,39 +201,54 @@ function heatmap_axis(figpos, A, title_text)
     ax
 end
 
-function intrinsic_spectrum(A::AbstractMatrix{<:Real}, ωs::AbstractVector{<:Real})
+function intrinsic_spectrum(A::AbstractMatrix{<:Real},
+                            ωs::AbstractVector{<:Real},
+                            T::AbstractMatrix{<:Real})
     n = size(A, 1)
-    Icomplex = Matrix{ComplexF64}(I, n, n)
     Ac = ComplexF64.(A)
+    Tc = ComplexF64.(T)
+    Icomplex = Matrix{ComplexF64}(I, n, n)
     out = zeros(Float64, length(ωs))
 
     for (k, ω) in pairs(ωs)
-        F = factorize(im * ω .* Icomplex - Ac)
+        F = factorize(im * ω .* Tc - Ac)
         R = F \ Icomplex
         out[k] = opnorm(R, 2)
     end
 
     out
 end
+function make_timescale_matrix(τ::AbstractVector{<:Real})
+    all(τ .> 0) || error("All timescales must be positive.")
+    return Diagonal(Float64.(τ))
+end
+τ_uniform = ones(50)                      # baseline: T = I
+τ_slow_hubs = ones(50)
+τ_slow_hubs[1:4] .= 3.0                   # hubs 3x slower
+
+τ_fast_hubs = ones(50)
+τ_fast_hubs[1:4] .= 0.4                   # hubs faster
+
+τ_gradient = Random.rand(50)              # random gradient
 # ------------------------------------------------------------
 # Main proof-of-concept
 # ------------------------------------------------------------
 function proof_progressive_hubset_creation(; all_P = true)
     n = 50
     kout = 6
-
-    # small deterministic hub set
     hubs = [1, 2, 3, 4]
-
-    # You can refine these more if wanted
     levels = [0.0, 0.25, 0.5, 0.75, 1.0]
+
+    τ = ones(n)
+    τ[hubs] .= 3.0    # example: hubs are slower
+    T = make_timescale_matrix(τ_gradient)
 
     B0 = regular_directed_mask(n, kout)
 
     As = Matrix{Float64}[]
     ratios = Vector{Float64}[]
     highs = Vector{Float64}[]
-    lows = Vector{Float64}[] 
+    lows = Vector{Float64}[]
     indeg_ginis = Float64[]
     indegs = Vector{Float64}[]
     intrinsics = Vector{Float64}[]
@@ -274,18 +275,18 @@ function proof_progressive_hubset_creation(; all_P = true)
             P_high = perturbation_operator_class(A, highC)
         end
 
-        H = structured_spectrum(A, P_high, OMEGAS)
-        L = structured_spectrum(A, P_low, OMEGAS)
+        H = structured_spectrum(A, P_high, OMEGAS, T)
+        L = structured_spectrum(A, P_low, OMEGAS, T)
 
         push!(highs, H)
         push!(lows, L)
         push!(ratios, H ./ L)
-        S = intrinsic_spectrum(A, OMEGAS)
+
+        S = intrinsic_spectrum(A, OMEGAS, T)
         push!(intrinsics, S)
     end
 
-    fig = Figure(size = (1700, 1200))
-    # Label(fig[0, :], "3) Progressive hub-set rewiring proof of concept (smoother transition)", fontsize = 24)
+    fig = Figure(size = (1700, 1800))
 
     # --------------------------------------------------------
     # Row 1: matrices
@@ -309,20 +310,19 @@ function proof_progressive_hubset_creation(; all_P = true)
             ylabel = idx == 1 ? "count" : "")
 
         vals = indegs[idx]
-    counts = countmap(vals)
+        counts = countmap(vals)
 
-    kmin = minimum(vals) - 1
-    kmax = maximum(vals) + 1
+        kmin = minimum(vals) - 1
+        kmax = maximum(vals) + 1
 
-    xs = collect(kmin:kmax)
-    ys = [get(counts, k, 0) for k in xs]
+        xs = collect(kmin:kmax)
+        ys = [get(counts, k, 0) for k in xs]
 
-    barplot!(ax, xs, ys, width = 0.6)
+        barplot!(ax, xs, ys, width = 0.6)
 
-    # Only override ticks if distribution is degenerate
-    if length(unique(vals)) == 1
-        ax.xticks = (xs, string.(xs))
-    end
+        if length(unique(vals)) == 1
+            ax.xticks = (xs, string.(xs))
+        end
     end
 
     # --------------------------------------------------------
@@ -343,10 +343,42 @@ function proof_progressive_hubset_creation(; all_P = true)
     axislegend(axr, position = :rt)
 
     # --------------------------------------------------------
-    # Row 4: structured spectra for high-centrality class
+    # Row 4: central-class RPR profile
+    # --------------------------------------------------------
+    axc = Axis(fig[4, 1:5],
+        title = "Central-class RPR profile",
+        xlabel = "frequency ω",
+        ylabel = "||R(ω) P_central R(ω)||",
+        xscale = log10,
+        yscale = identity)
+
+    for (idx, lev) in enumerate(levels)
+        lbl = @sprintf("rewiring = %.2f", lev)
+        lines!(axc, OMEGAS, highs[idx], linewidth = 3, label = lbl)
+    end
+    axislegend(axc, position = :rt)
+
+    # --------------------------------------------------------
+    # Row 5: satellite-class RPR profile
+    # --------------------------------------------------------
+    axl = Axis(fig[5, 1:5],
+        title = "Satellite-class RPR profile",
+        xlabel = "frequency ω",
+        ylabel = "||R(ω) P_satellite R(ω)||",
+        xscale = log10,
+        yscale = identity)
+
+    for (idx, lev) in enumerate(levels)
+        lbl = @sprintf("rewiring = %.2f", lev)
+        lines!(axl, OMEGAS, lows[idx], linewidth = 3, label = lbl)
+    end
+    axislegend(axl, position = :rt)
+
+    # --------------------------------------------------------
+    # Row 6: intrinsic spectra
     # --------------------------------------------------------
     axs = Axis(
-        fig[4, 1:5],
+        fig[6, 1:5],
         title = "Intrinsic sensitivity across rewiring levels",
         xlabel = "frequency ω",
         ylabel = "S(ω)",
@@ -362,4 +394,4 @@ function proof_progressive_hubset_creation(; all_P = true)
     display(fig)
 end
 
-proof_progressive_hubset_creation(; all_P = false) 
+proof_progressive_hubset_creation(; all_P = false)

@@ -347,10 +347,6 @@ begin
     - normal system                  = $(round(peak_normal, digits=4))
     - non-normal system              = $(round(peak_nonnormal, digits=4))
 
-    Interpretation
-    - the normal case is eigenvalue-readable
-    - the non-normal case has the same eigenvalues, but its spectrum is no longer
-    predicted by eigenvalues alone
     """
     Label(fig[2, 4], txt, tellwidth = false, fontsize = 16, justification = :left)
 
