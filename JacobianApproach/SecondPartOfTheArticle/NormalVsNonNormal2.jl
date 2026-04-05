@@ -300,8 +300,8 @@ begin
     )
 
     lines!(ax1, OMEGAS, S_eig, linewidth = 2, linestyle = :dash, color = :black, label = "eigenvalue prediction")
-    lines!(ax1, OMEGAS, S_normal, linewidth = 3, color = :dodgerblue, label = "normal")
-    lines!(ax1, OMEGAS, S_nonnormal, linewidth = 3, color = :crimson, label = "non-normal")
+    lines!(ax1, OMEGAS, S_normal, linewidth = 3, color = :dodgerblue, label = "Low trophic coherence (Omnivory)")
+    lines!(ax1, OMEGAS, S_nonnormal, linewidth = 3, color = :crimson, label = "High trophic coherence (No Omnivory)")
 
     # imaginary parts of eigenvalues
     vlines!(ax1, [B1, B2], color = :gray40, linestyle = :dot, linewidth = 2)
