@@ -342,8 +342,8 @@ begin
     )
 
     lines!(ax1, OMEGAS, S_eig, linewidth = 2, linestyle = :dash, color = :black, label = "eigenvalue prediction")
-    lines!(ax1, OMEGAS, S_normal, linewidth = 3, color = :dodgerblue, label = "normal")
-    lines!(ax1, OMEGAS, S_nonnormal, linewidth = 3, color = :crimson, label = "non-normal")
+    lines!(ax1, OMEGAS, S_normal, linewidth = 3, color = :dodgerblue, label = "Low trophic coherence (Omnivory)")
+    lines!(ax1, OMEGAS, S_nonnormal, linewidth = 3, color = :crimson, label = "High trophic coherence (No Omnivory)")
 
     # imaginary parts of eigenvalues
     vlines!(ax1, [B1], color = :gray40, linestyle = :dot, linewidth = 2)
@@ -357,40 +357,40 @@ begin
     ax1.ygridvisible = false
 
     # Diagnostics text
-    txt = """
-    Construction
-    - normal baseline: block-diagonal damped rotations
-    - non-normal comparison: same diagonal blocks + sparse strictly upper block couplings
+    # txt = """
+    # Construction
+    # - normal baseline: block-diagonal damped rotations
+    # - non-normal comparison: same diagonal blocks + sparse strictly upper block couplings
 
-    Shared eigenvalues
-    - λ = -$A1 ± i$B1   repeated $REPEAT_BLOCKS times
-    - λ = -$A2 ± i$B2   repeated $REPEAT_BLOCKS times
+    # Shared eigenvalues
+    # - λ = -$A1 ± i$B1   repeated $REPEAT_BLOCKS times
+    # - λ = -$A2 ± i$B2   repeated $REPEAT_BLOCKS times
 
-    Diagnostics
-    - spectral abscissa (normal)     = $(round(α_normal, digits=6))
-    - spectral abscissa (non-normal) = $(round(α_nonnormal, digits=6))
+    # Diagnostics
+    # - spectral abscissa (normal)     = $(round(α_normal, digits=6))
+    # - spectral abscissa (non-normal) = $(round(α_nonnormal, digits=6))
 
-    - is normal? baseline   = $(normal_flag)
-    - is normal? comparison = $(nonnormal_flag)
+    # - is normal? baseline   = $(normal_flag)
+    # - is normal? comparison = $(nonnormal_flag)
 
-    - offdiag Frobenius (normal)     = $(round(fro_off_normal, digits=6))
-    - offdiag Frobenius (non-normal) = $(round(fro_off_nonnormal, digits=6))
+    # - offdiag Frobenius (normal)     = $(round(fro_off_normal, digits=6))
+    # - offdiag Frobenius (non-normal) = $(round(fro_off_nonnormal, digits=6))
 
-    - offdiag nonzeros (normal)      = $(nnz_off_normal)
-    - offdiag nonzeros (non-normal)  = $(nnz_off_nonnormal)
+    # - offdiag nonzeros (normal)      = $(nnz_off_normal)
+    # - offdiag nonzeros (non-normal)  = $(nnz_off_nonnormal)
 
-    Peak locations
-    - eigenvalue-only benchmark peak = $(round(ω_peak_eig, digits=4))
-    - normal system peak             = $(round(ω_peak_normal, digits=4))
-    - non-normal system peak         = $(round(ω_peak_nonnormal, digits=4))
+    # Peak locations
+    # - eigenvalue-only benchmark peak = $(round(ω_peak_eig, digits=4))
+    # - normal system peak             = $(round(ω_peak_normal, digits=4))
+    # - non-normal system peak         = $(round(ω_peak_nonnormal, digits=4))
 
-    Peak heights
-    - eigenvalue-only benchmark      = $(round(peak_eig, digits=4))
-    - normal system                  = $(round(peak_normal, digits=4))
-    - non-normal system              = $(round(peak_nonnormal, digits=4))
+    # Peak heights
+    # - eigenvalue-only benchmark      = $(round(peak_eig, digits=4))
+    # - normal system                  = $(round(peak_normal, digits=4))
+    # - non-normal system              = $(round(peak_nonnormal, digits=4))
 
-    """
-    Label(fig[2, 4], txt, tellwidth = false, fontsize = 16, justification = :left)
+    # """
+    # Label(fig[2, 4], txt, tellwidth = false, fontsize = 16, justification = :left)
 
     display(fig)
 end
