@@ -33,7 +33,7 @@ using Printf
 # -------------------------
 const OMEGAS = exp.(range(log(0.05), log(10.0), length = 1600))
 const DT = 0.02
-const FORCE_START = 8.0
+const FORCE_START = 20.0
 const FORCE_AMPLITUDE = 0.65
 const OUTDIR = "animations_completely_different_profiles"
 const SHOWN_SPECIES = [3, 5, 7, 9, 11]
@@ -172,11 +172,10 @@ function build_original_system()
 end
 
 function build_modified_system()
-    # Dominant high-frequency resonance around ~5.25,
-    # but distributed across several neighboring modes rather than
-    # concentrated almost entirely on species 9.
+    # High-frequency resonance around ~5.25, but distributed across
+    # neighboring modes instead of concentrating mostly on species 9.
     freqs = [1.50, 2.30, 3.20, 4.10, 5.25, 6.90]
-    damps = [0.55, 0.48, 0.22, 0.11, 0.020, 0.16]
+    damps = [0.55, 0.48, 0.22, 0.11, 0.040, 0.16]
 
     A = zeros(Float64, 12, 12)
     for k in 1:6
@@ -186,41 +185,42 @@ function build_modified_system()
     add_chain_couplings!(
         A;
         c12 = 0.00,
-        c23 = 0.12,
-        c34 = 0.55,
-        c45 = 0.95,
-        c56 = 0.85,
+        c23 = 0.14,
+        c34 = 0.62,
+        c45 = 0.82,
+        c56 = 0.78,
         long13 = 0.00,
-        long24 = 0.06,
-        long35 = 0.26,
-        long46 = 0.22,
+        long24 = 0.08,
+        long35 = 0.30,
+        long46 = 0.24,
         fb21 = 0.00,
         fb32 = 0.00,
         fb43 = -0.05,
-        fb54 = -0.06,
+        fb54 = -0.05,
         fb65 = 0.00
     )
 
-    # Reduce pure concentration onto species 9, increase spread.
-    A[9, 7]   = 0.42
-    A[10, 7]  = 0.24
-    A[10, 8]  = 0.14
+    # Spread response backward and forward around the high-frequency block
+    A[9, 7]   = 0.28
+    A[10, 7]  = 0.18
+    A[10, 8]  = 0.10
 
-    A[7, 5]   = 0.62
-    A[8, 5]   = 0.22
-    A[8, 6]   = 0.10
+    A[7, 5]   = 0.78
+    A[8, 5]   = 0.28
+    A[8, 6]   = 0.12
 
-    A[11, 9]  = 0.38
-    A[12, 9]  = 0.20
-    A[12, 10] = 0.10
+    A[11, 9]  = 0.26
+    A[12, 9]  = 0.14
+    A[12, 10] = 0.08
 
-    # Stronger cross-talk toward neighboring visible species
-    A[9, 5]   = 0.42
-    A[11, 7]  = 0.46
-    A[7, 9]   = -0.06
-    A[5, 9]   = 0.18
-    A[11, 5]  = 0.22
-    A[5, 11]  = 0.16
+    # Extra cross-talk to make 5, 7, 11 participate much more
+    A[9, 5]   = 0.46
+    A[11, 7]  = 0.58
+    A[5, 9]   = 0.20
+    A[11, 5]  = 0.30
+    A[5, 11]  = 0.22
+    A[7, 11]  = 0.18
+    A[11, 9] += 0.10
 
     return stabilize_if_needed(A; margin = 0.24)
 end
@@ -310,93 +310,101 @@ end
 function animate_case(
     filepath::String,
     title_text::String,
+    state_lim::Float64,
     ωforce::Float64,
     ts::AbstractVector{<:Real},
-    X_orig::AbstractMatrix{<:Real},
-    X_mod::AbstractMatrix{<:Real},
+    X_orig::AbstractMatrix,
+    X_mod::AbstractMatrix,
     forcing_signal::AbstractVector{<:Real},
     ωs::AbstractVector{<:Real},
     S_orig::AbstractVector{<:Real},
     S_mod::AbstractVector{<:Real};
     shown_species = SHOWN_SPECIES
 )
-    fig = Figure(size = (1600, 1100))
-    Label(fig[0, :], title_text, fontsize = 24)
+    fig = Figure(size = (1600, 1040))
+    Label(fig[0, 1], title_text, fontsize = 24)
+
+    # Inner grid for the six panels
+    g = GridLayout()
+    fig[1, 1] = g
 
     y_force = forcing_ylim(forcing_signal)
     y_state = robust_state_ylim(X_orig[shown_species, :], X_mod[shown_species, :])
     y_prof = shared_profile_ylim(S_orig, S_mod)
 
-    # Top row
+    # Create the 6 axes inside the inner grid
     ax_force_left = Axis(
-        fig[1, 1],
+        g[1, 1],
         title = @sprintf("Environmental forcing   (ω = %.3f)", ωforce),
         xlabel = "time",
         ylabel = "u(t)"
     )
-    xlims!(ax_force_left, first(ts), last(ts))
-    ylims!(ax_force_left, y_force...)
-    ax_force_left.xgridvisible = false
-    ax_force_left.ygridvisible = false
-
     ax_force_right = Axis(
-        fig[1, 2],
+        g[1, 2],
         title = @sprintf("Environmental forcing   (ω = %.3f)", ωforce),
         xlabel = "time",
         ylabel = "u(t)"
     )
-    xlims!(ax_force_right, first(ts), last(ts))
-    ylims!(ax_force_right, y_force...)
-    ax_force_right.xgridvisible = false
-    ax_force_right.ygridvisible = false
 
-    # Middle row
     ax_orig = Axis(
-        fig[2, 1],
+        g[2, 1],
         title = "Community dynamics — original",
         xlabel = "time",
         ylabel = "state"
     )
-    xlims!(ax_orig, first(ts), last(ts))
-    ylims!(ax_orig, y_state...)
-    ax_orig.xgridvisible = false
-    ax_orig.ygridvisible = false
-
     ax_mod = Axis(
-        fig[2, 2],
+        g[2, 2],
         title = "Community dynamics — modified",
         xlabel = "time",
         ylabel = "state"
     )
-    xlims!(ax_mod, first(ts), last(ts))
-    ylims!(ax_mod, y_state...)
-    ax_mod.xgridvisible = false
-    ax_mod.ygridvisible = false
 
-    # Bottom row
     ax_prof_orig = Axis(
-        fig[3, 1],
-        title = "Original sensitivity profile   ||R(iω)||₂",
+        g[3, 1],
+        title = "Intrinsic sensitivity profile ||R(ω)||",
         xlabel = "frequency ω",
         ylabel = "||R(iω)||₂",
         xscale = log10,
         yscale = log10
     )
-    ylims!(ax_prof_orig, y_prof...)
-    ax_prof_orig.xgridvisible = false
-    ax_prof_orig.ygridvisible = false
-
     ax_prof_mod = Axis(
-        fig[3, 2],
-        title = "Modified sensitivity profile   ||R(iω)||₂",
+        g[3, 2],
+        title = "Structural sensitivity profile ||R(ω)PR(ω)||",
         xlabel = "frequency ω",
         ylabel = "||R(iω)||₂",
         xscale = log10,
         yscale = log10
     )
+
+    # # Force equal panel sizes
+    # colsize!(g, 1, Relative(1))
+    # colsize!(g, 2, Relative(1))
+    # rowsize!(g, 1, Relative(1))
+    # rowsize!(g, 2, Relative(1))
+    # rowsize!(g, 3, Relative(1))
+
+    # Axes limits
+    xlims!(ax_force_left, first(ts), last(ts))
+    xlims!(ax_force_right, first(ts), last(ts))
+    ylims!(ax_force_left, y_force...)
+    ylims!(ax_force_right, y_force...)
+
+    xlims!(ax_orig, first(ts), last(ts))
+    xlims!(ax_mod, first(ts), last(ts))
+    # ylims!(ax_orig, y_state...)
+    # ylims!(ax_mod, y_state...)
+    ylims!(ax_orig, (-state_lim, state_lim))
+    ylims!(ax_mod, (-state_lim, state_lim))
+    # ylims!(ax_orig, (-0.5, 0.5))
+    # ylims!(ax_mod, (-0.5, 0.5))
+
+    ylims!(ax_prof_orig, y_prof...)
     ylims!(ax_prof_mod, y_prof...)
-    ax_prof_mod.xgridvisible = false
-    ax_prof_mod.ygridvisible = false
+
+    for ax in (ax_force_left, ax_force_right, ax_orig, ax_mod, ax_prof_orig, ax_prof_mod)
+        ax.xgridvisible = false
+        ax.ygridvisible = false
+    end
 
     idxω = argmin(abs.(ωs .- ωforce))
 
@@ -408,7 +416,6 @@ function animate_case(
     vlines!(ax_prof_mod, [ωforce], color = :dodgerblue, linestyle = :dash, linewidth = 3)
     scatter!(ax_prof_mod, [ωforce], [S_mod[idxω]], color = :crimson, markersize = 12)
 
-    # Animated traces
     t_idx = Observable(1)
     ts_now = lift(i -> ts[1:i], t_idx)
     f_now = lift(i -> forcing_signal[1:i], t_idx)
@@ -420,19 +427,15 @@ function animate_case(
 
     for (k, sp) in enumerate(shown_species)
         x_now = lift(i -> X_orig[sp, 1:i], t_idx)
-        lines!(ax_orig, ts_now, x_now, linewidth = 2.7, color = colors[k], label = "species $sp")
+        lines!(ax_orig, ts_now, x_now, linewidth = 2.7, color = colors[k])
     end
-    ylims!(ax_orig, (-0.5, 0.5))
-    # axislegend(ax_orig, position = :rb)
 
     for (k, sp) in enumerate(shown_species)
-        x_now = lift(i -> X_mod[sp, 1:i], t_idx)
-        lines!(ax_mod, ts_now, x_now, linewidth = 2.7, color = colors[k], label = "species $sp")
+        x_now = lift(i -> X_orig[sp, 1:i], t_idx)
+        lines!(ax_mod, ts_now, x_now, linewidth = 2.7, color = colors[k])
     end
-    ylims!(ax_mod, (-0.5, 0.5))
-    # axislegend(ax_mod, position = :rb)
 
-    frame_step = 10
+    frame_step = 8
     frame_indices = 1:frame_step:length(ts)
 
     record(fig, filepath, frame_indices; framerate = 30) do i
@@ -486,21 +489,16 @@ b_low[3] = 0.18
 b_low[5] = 0.05
 
 # For modified strong / original weak
-# For modified strong / original weak
-# Spread the forcing over the high-frequency neighborhood,
-# instead of injecting almost only into species 9.
-# For modified strong / original weak
-# Broad excitation of the high-frequency neighborhood
-# For modified strong / original weak
-# Deliberately avoid over-forcing species 9 directly.
+# Broad high-frequency forcing with reduced direct emphasis on species 9.
 b_high = zeros(Float64, 12)
-b_high[5]  = 0.55
+b_high[5]  = 0.70
+b_high[6]  = 0.18
 b_high[7]  = 1.00
-b_high[8]  = 0.35
-b_high[9]  = 0.32
-b_high[10] = 0.30
+b_high[8]  = 0.32
+b_high[9]  = 0.18
+b_high[10] = 0.18
 b_high[11] = 0.95
-b_high[12] = 0.28
+b_high[12] = 0.24
 
 # Simulations
 ts_modpeak, X_modpeak_orig, f_modpeak = simulate_forced_system(A_orig, b_high, ω_mod_peak)
@@ -512,7 +510,8 @@ _,           X_origpeak_mod,  _          = simulate_forced_system(A_mod,  b_low,
 # Animation 1: original weak -> modified strong
 animate_case(
     joinpath(OUTDIR, "01_weak_to_strong.mp4"),
-    @sprintf("Original weak → modified strong at the modified peak frequency   (ω = %.3f)", ω_mod_peak),
+    "Weak intrinsic sensitivity → Strong structural sensitivity",
+    1.0, #state_lim
     ω_mod_peak,
     ts_modpeak,
     X_modpeak_orig,
@@ -526,7 +525,8 @@ animate_case(
 # Animation 2: original strong -> modified weak
 animate_case(
     joinpath(OUTDIR, "02_strong_to_weak.mp4"),
-    @sprintf("Original strong → modified weak at the original peak frequency   (ω = %.3f)", ω_orig_peak),
+    "Strong intrinsic sensitivity → Weak structural sensitivity",
+    0.5, #state_lim
     ω_orig_peak,
     ts_origpeak,
     X_origpeak_orig,
