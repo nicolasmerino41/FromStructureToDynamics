@@ -186,7 +186,7 @@ begin
     y_orig = gamma_bump(t; t0=1.2,  k=3.2, θ=0.78, A=1.0)
     y_mod  = gamma_bump(t; t0=1.35, k=3.6, θ=0.84, A=0.88)
 
-    ggate = t .>= 0.0
+    gate = t .>= 0.0
 
     # 1) left-heavy tail
     c1 = gate .* (
