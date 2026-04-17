@@ -1,0 +1,632 @@
+# ============================================================
+# FINAL FIGURE 2 (R / ggplot2 version)
+# ------------------------------------------------------------
+# Top-left:  schematic network with two localized modified regions
+# Top-right: frequency-domain panel with valley/peak markers
+# Bottom:    time-domain responses under two structural modifications
+# Extras:    small forcing insets in panels C and D
+# ============================================================
+
+# -------------------------
+# Packages
+# -------------------------
+library(ggplot2)
+library(patchwork)
+library(scales)
+library(grid)
+
+# -------------------------
+# Global scaling
+# -------------------------
+FREQ_SHIFT <- 0.62
+TIME_SCALE <- 0.65
+MODEL_SCALE <- FREQ_SHIFT * TIME_SCALE
+
+# -------------------------
+# Frequency grid
+# -------------------------
+OMEGAS <- FREQ_SHIFT * exp(seq(log(0.08), log(2.5), length.out = 1800))
+
+# -------------------------
+# Time-domain parameters
+# -------------------------
+DT <- 0.03
+TMAX <- 78.0 / FREQ_SHIFT
+FORCE_START <- 0.12 * TMAX
+FORCE_AMPLITUDE <- 0.18
+
+# Structural perturbation magnitudes
+EPS_A <- TIME_SCALE * 0.25
+EPS_B <- TIME_SCALE * 0.25
+
+# -------------------------
+# Colors
+# -------------------------
+COL_BG   <- "white"
+COL_EDGE <- "#ABABAB"
+COL_NODE <- "#2E2E2E"
+COL_A    <- "darkorange"
+COL_B    <- "blue"
+COL_INTR <- "black"
+
+# ============================================================
+# Helpers
+# ============================================================
+
+opnorm2 <- function(M) {
+  max(svd(M, nu = 0, nv = 0)$d)
+}
+
+resolvent <- function(A, omega) {
+  n <- nrow(A)
+  Icomplex <- diag(1 + 0i, n)
+  Ac <- A + 0i
+  solve(1i * omega * Icomplex - Ac, Icomplex)
+}
+
+intrinsic_profile <- function(A, omegas) {
+  vapply(omegas, function(w) opnorm2(resolvent(A, w)), numeric(1))
+}
+
+rpr_profile <- function(A, P, omegas) {
+  vapply(omegas, function(w) {
+    R <- resolvent(A, w)
+    opnorm2(R %*% P %*% R)
+  }, numeric(1))
+}
+
+choose_peak_in_band <- function(S, omegas, band) {
+  idx <- which(omegas >= band[1] & omegas <= band[2])
+  if (length(idx) == 0) stop(sprintf("No frequencies in band (%g, %g)", band[1], band[2]))
+  idx[which.max(S[idx])]
+}
+
+choose_valley_in_band <- function(S, omegas, band) {
+  idx <- which(omegas >= band[1] & omegas <= band[2])
+  if (length(idx) == 0) stop(sprintf("No frequencies in band (%g, %g)", band[1], band[2]))
+  idx[which.min(S[idx])]
+}
+
+simulate_forced_system <- function(A, b, omega,
+                                   dt = DT,
+                                   tmax = TMAX,
+                                   forcing_amplitude = FORCE_AMPLITUDE,
+                                   forcing_start = FORCE_START) {
+  ts <- seq(0, tmax, by = dt)
+  n <- nrow(A)
+  X <- matrix(0, nrow = n, ncol = length(ts))
+  
+  forcing_scalar <- function(t) {
+    if (t < forcing_start) {
+      0
+    } else {
+      -forcing_amplitude * sin(omega * (t - forcing_start))
+    }
+  }
+  
+  forcing_at_time <- function(t) {
+    forcing_scalar(t) * b
+  }
+  
+  f <- function(x, t) {
+    as.vector(A %*% x + forcing_at_time(t))
+  }
+  
+  x <- rep(0, n)
+  for (k in seq_len(length(ts) - 1)) {
+    t <- ts[k]
+    k1 <- f(x, t)
+    k2 <- f(x + 0.5 * dt * k1, t + 0.5 * dt)
+    k3 <- f(x + 0.5 * dt * k2, t + 0.5 * dt)
+    k4 <- f(x + dt * k3, t + dt)
+    x <- x + (dt / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
+    X[, k + 1] <- x
+  }
+  
+  forcing_signal <- vapply(ts, forcing_scalar, numeric(1))
+  list(ts = ts, X = X, forcing_signal = forcing_signal)
+}
+
+profile_ylim <- function(...) {
+  Ss <- list(...)
+  ymin <- min(vapply(Ss, min, numeric(1)))
+  ymax <- max(vapply(Ss, max, numeric(1)))
+  ymin <- max(ymin, 1e-4)
+  ymax <- max(ymax, 10 * ymin)
+  c(0.95 * ymin, 1.08 * ymax)
+}
+
+community_ylim <- function(..., q = 0.985) {
+  ys <- list(...)
+  vals <- abs(unlist(ys))
+  m <- as.numeric(quantile(vals, probs = q, names = FALSE))
+  m <- max(m, 0.05)
+  c(-1.12 * m, 1.12 * m)
+}
+
+circle_df <- function(cx, cy, r, n = 240) {
+  th <- seq(0, 2 * pi, length.out = n)
+  data.frame(x = cx + r * cos(th), y = cy + r * sin(th))
+}
+
+# ============================================================
+# Model
+# ============================================================
+
+A_raw <- matrix(c(
+  -0.22, -0.55,  0.10,  0.00,
+  0.55, -0.22,  0.00,  0.10,
+  0.10,  0.00, -0.16, -1.50,
+  0.00,  0.10,  1.50, -0.16
+), nrow = 4, byrow = TRUE)
+
+A <- MODEL_SCALE * A_raw
+
+P_A <- matrix(c(
+  0.0, 1.0, 0.0, 0.0,
+  1.0, 0.0, 0.0, 0.0,
+  0.0, 0.0, 0.0, 0.0,
+  0.0, 0.0, 0.0, 0.0
+), nrow = 4, byrow = TRUE)
+
+P_B <- matrix(c(
+  0.0, 0.0, 0.0,  0.0,
+  0.0, 0.0, 0.0,  0.0,
+  0.0, 0.0, 0.35, 1.10,
+  0.0, 0.0, 0.55,-0.25
+), nrow = 4, byrow = TRUE)
+
+A_A <- A + EPS_A * P_A
+A_B <- A + EPS_B * P_B
+
+# ============================================================
+# Frequency-domain analysis
+# ============================================================
+
+S_intr <- intrinsic_profile(A, OMEGAS)
+S_A    <- rpr_profile(A, P_A, OMEGAS)
+S_B    <- rpr_profile(A, P_B, OMEGAS)
+
+idx_valley <- choose_valley_in_band(S_B, OMEGAS, FREQ_SHIFT * c(0.28, 0.48))
+idx_peak   <- choose_peak_in_band(S_B, OMEGAS, FREQ_SHIFT * c(0.95, 1.35))
+
+omega_valley <- OMEGAS[idx_valley]
+omega_peak   <- OMEGAS[idx_peak]
+
+cat("\n")
+cat(sprintf("Chosen valley frequency: ω = %.4f | S_B = %.4f\n", omega_valley, S_B[idx_valley]))
+cat(sprintf("Chosen peak frequency:   ω = %.4f | S_B = %.4f\n", omega_peak,   S_B[idx_peak]))
+cat(sprintf("Peak/valley ratio:       %.2f\n", S_B[idx_peak] / S_B[idx_valley]))
+
+# ============================================================
+# Time-domain analysis
+# ============================================================
+
+b <- c(1.0, -0.65, 0.55, -0.25)
+b <- b / sqrt(sum(b^2))
+
+cvec <- c(1.0, 0.8, 1.1, 0.9)
+
+sim_valley_base <- simulate_forced_system(A,   b, omega_valley)
+sim_valley_A    <- simulate_forced_system(A_A, b, omega_valley)
+sim_valley_B    <- simulate_forced_system(A_B, b, omega_valley)
+
+sim_peak_base <- simulate_forced_system(A,   b, omega_peak)
+sim_peak_A    <- simulate_forced_system(A_A, b, omega_peak)
+sim_peak_B    <- simulate_forced_system(A_B, b, omega_peak)
+
+ts <- sim_valley_base$ts
+
+Y_valley_base <- as.vector(t(cvec) %*% sim_valley_base$X)
+Y_valley_A    <- as.vector(t(cvec) %*% sim_valley_A$X)
+Y_valley_B    <- as.vector(t(cvec) %*% sim_valley_B$X)
+
+Y_peak_base <- as.vector(t(cvec) %*% sim_peak_base$X)
+Y_peak_A    <- as.vector(t(cvec) %*% sim_peak_A$X)
+Y_peak_B    <- as.vector(t(cvec) %*% sim_peak_B$X)
+
+delta_valley_A <- vapply(seq_along(ts), function(i) sqrt(sum((sim_valley_A$X[, i] - sim_valley_base$X[, i])^2)), numeric(1))
+delta_valley_B <- vapply(seq_along(ts), function(i) sqrt(sum((sim_valley_B$X[, i] - sim_valley_base$X[, i])^2)), numeric(1))
+delta_peak_A   <- vapply(seq_along(ts), function(i) sqrt(sum((sim_peak_A$X[, i]   - sim_peak_base$X[, i])^2)), numeric(1))
+delta_peak_B   <- vapply(seq_along(ts), function(i) sqrt(sum((sim_peak_B$X[, i]   - sim_peak_base$X[, i])^2)), numeric(1))
+
+forcing_valley <- FORCE_AMPLITUDE * sin(omega_valley * ts)
+forcing_peak   <- FORCE_AMPLITUDE * sin(omega_peak * ts)
+
+y_prof  <- profile_ylim(S_intr, S_A, S_B)
+y_comm  <- community_ylim(Y_valley_base, Y_valley_A, Y_valley_B, Y_peak_base, Y_peak_A, Y_peak_B)
+pad_low  <- 0.08 * diff(y_comm)
+pad_high <- 0.28 * diff(y_comm)
+y_comm <- c(y_comm[1] - pad_low, y_comm[2] + pad_high)
+# ============================================================
+# Data for plotting
+# ============================================================
+
+profile_df <- rbind(
+  data.frame(omega = OMEGAS, sensitivity = S_intr, class = "intrinsic sensitivity"),
+  data.frame(omega = OMEGAS, sensitivity = S_A,    class = "structural modification A"),
+  data.frame(omega = OMEGAS, sensitivity = S_B,    class = "structural modification B")
+)
+
+profile_df$class <- factor(
+  profile_df$class,
+  levels = c("intrinsic sensitivity", "structural modification A", "structural modification B")
+)
+
+prof_cols <- c(
+  "intrinsic sensitivity" = COL_INTR,
+  "structural modification A"    = COL_A,
+  "structural modification B"    = COL_B
+)
+
+valley_df <- rbind(
+  data.frame(time = ts, value = Y_valley_base, series = "baseline"),
+  data.frame(time = ts, value = Y_valley_A,    series = "structural modification A"),
+  data.frame(time = ts, value = Y_valley_B,    series = "structural modification B")
+)
+
+peak_df <- rbind(
+  data.frame(time = ts, value = Y_peak_base, series = "baseline"),
+  data.frame(time = ts, value = Y_peak_A,    series = "structural modification A"),
+  data.frame(time = ts, value = Y_peak_B,    series = "structural modification B")
+)
+
+forcing_valley_df <- data.frame(time = ts, value = forcing_valley)
+forcing_peak_df   <- data.frame(time = ts, value = forcing_peak)
+
+ts_cols <- c(
+  "baseline"           = "grey70",
+  "structural modification A" = COL_A,
+  "structural modification B" = COL_B
+)
+
+ts_ltys <- c(
+  "baseline"           = "solid",
+  "structural modification A" = "dotted",
+  "structural modification B" = "dotted"
+)
+
+# label positions
+xA_lab <- FREQ_SHIFT * 0.14
+yA_lab <- 1.25 * max(S_A)
+
+xB_lab <- FREQ_SHIFT * 0.58
+yB_lab <- 0.52 * max(S_B)
+
+yA_target <- S_A[which.min(abs(OMEGAS - omega_valley))]
+yB_target <- S_B[which.min(abs(OMEGAS - omega_peak))]
+
+# ============================================================
+# network data  (REPLACE CURRENT BLOCK ONLY)
+# preserves original positioning, but gives a more realistic
+# uneven topology: hubs, intermediates, and satellite species
+# ============================================================
+
+# Keep roughly the same visual footprint as your original layout
+pts <- data.frame(
+  node = 1:12,
+  x = c(0.08, 0.18, 0.29, 0.22,
+        0.42, 0.50, 0.46,
+        0.70, 0.83, 0.73,
+        1.03, 1.00),
+  y = c(0.63, 0.82, 0.60, 0.34,
+        0.80, 0.54, 0.22,
+        0.74, 0.54, 0.28,
+        0.73, 0.40)
+)
+
+# EXACTLY keep your original placement logic
+x_center <- mean(range(pts$x))
+x_scale_net <- 0.92
+dy_net <- -0.08
+
+pts_net <- transform(
+  pts,
+  x = x_center + x_scale_net * (x - x_center),
+  y = y + dy_net
+)
+
+pts_net$x <- 0.5 + 0.85 * (pts_net$x - 0.5)
+pts_net$y <- pts_net$y + dy_net
+
+# ------------------------------------------------------------
+# More realistic topology:
+# - species 5, 6, 9 are more central
+# - species 1, 4, 7, 11, 12 are more peripheral
+# - uneven degree distribution
+# - still visually readable
+# ------------------------------------------------------------
+base_edges <- data.frame(
+  from = c(
+    1,2,2,3,4,      # left/peripheral into core
+    5,5,          # node 5 = local hub
+    6,6,6,          # node 6 = connector hub
+    8,            # right-mid connector
+    9,9,9,9          # node 9 = right hub
+    # 10,            # lower-right intermediate
+    # 11                # outer-right species
+  ),
+  to = c(
+    2,3,5,6,6,
+    6,9,
+    7,9,10,
+    9,
+    10,11,12,8
+    # 12,
+    # 12
+  )
+)
+
+# Highlight one species for each structural class
+regionA_nodes <- c(3)
+regionB_nodes <- c(9)
+
+modA_edges <- subset(base_edges, from == regionA_nodes[1] | to == regionA_nodes[1])
+modB_edges <- subset(base_edges, from == regionB_nodes[1] | to == regionB_nodes[1])
+
+edge_df <- function(edges, pts_df) {
+  merge(edges, pts_df, by.x = "from", by.y = "node") |>
+    merge(pts_df, by.x = "to", by.y = "node", suffixes = c("_from", "_to"))
+}
+
+base_edges_df <- edge_df(base_edges, pts_net)
+modA_edges_df <- edge_df(modA_edges, pts_net)
+modB_edges_df <- edge_df(modB_edges, pts_net)
+
+# Circles centered on the highlighted species
+circA_df <- circle_df(
+  pts_net$x[pts_net$node == regionA_nodes],
+  pts_net$y[pts_net$node == regionA_nodes],
+  0.11
+)
+
+circB_df <- circle_df(
+  pts_net$x[pts_net$node == regionB_nodes],
+  pts_net$y[pts_net$node == regionB_nodes],
+  0.11
+)
+# ============================================================
+# Themes
+# ============================================================
+
+theme_clean <- theme_minimal(base_size = 12) +
+  theme(
+    panel.grid = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold"),
+    panel.background = element_rect(fill = COL_BG, colour = NA),
+    plot.background = element_rect(fill = "white", colour = NA),
+    legend.title = element_blank(),
+    legend.background = element_rect(fill = alpha("white", 0.9), colour = "grey50"),
+    legend.key = element_rect(fill = alpha("white", 0), colour = NA)
+  )
+
+theme_inset <- theme_void() +
+  theme(
+    panel.background = element_rect(fill = alpha("white", 0.92), colour = "grey60", linewidth = 0.3),
+    plot.background = element_rect(fill = alpha("white", 0), colour = NA)
+  )
+
+# ============================================================
+# Panel: network
+# ============================================================
+p_net <- ggplot() +
+  geom_polygon(data = circA_df, aes(x, y), fill = alpha(COL_A, 0.13), color = alpha(COL_A, 0.65), linewidth = 0.7) +
+  geom_polygon(data = circB_df, aes(x, y), fill = alpha(COL_B, 0.13), color = alpha(COL_B, 0.65), linewidth = 0.7) +
+  geom_segment(
+    data = base_edges_df,
+    aes(x = x_from, y = y_from, xend = x_to, yend = y_to),
+    color = COL_EDGE, linewidth = 0.8
+  ) +
+  geom_segment(
+    data = modA_edges_df,
+    aes(x = x_from, y = y_from, xend = x_to, yend = y_to),
+    color = COL_A, linewidth = 1.6
+  ) +
+  geom_segment(
+    data = modB_edges_df,
+    aes(x = x_from, y = y_from, xend = x_to, yend = y_to),
+    color = COL_B, linewidth = 1.6
+  ) +
+  geom_point(data = pts_net, aes(x, y), color = COL_NODE, size = 3.5) +
+  geom_point(data = subset(pts_net, node %in% regionA_nodes), aes(x, y), color = COL_A, size = 4.1) +
+  geom_point(data = subset(pts_net, node %in% regionB_nodes), aes(x, y), color = COL_B, size = 4.1) +
+  geom_text(
+    data = pts_net,
+    aes(x, y, label = node),
+    vjust = -1.2,
+    size = 4,
+    color = "black"
+  ) +
+  annotate(
+    "curve",
+    x = circA_cx, y = pts_net$y[pts_net$node == regionA_nodes],
+    xend = x_center + x_scale_net * (0.18 - x_center),
+    yend = 0.91 + dy_net*1.5 - 0.04,
+    curvature = -0.14,
+    arrow = arrow(length = unit(0.18, "cm")),
+    color = alpha(COL_A, 0.55),
+    linewidth = 0.7
+  ) +
+  annotate(
+    "curve",
+    x = circB_cx - 0.03, y = pts_net$y[pts_net$node == regionB_nodes] + 0.07,
+    xend = x_center + x_scale_net * (0.76 - x_center),
+    yend = 0.91 + dy_net*1.5 - 0.04,
+    curvature = 0.14,
+    arrow = arrow(length = unit(0.18, "cm")),
+    color = alpha(COL_B, 0.55),
+    linewidth = 0.7
+  ) +
+  annotate("text", x = x_center + x_scale_net * (0.18 - x_center), y = 0.91 + dy_net*1.5,
+           label = "Structural modification A", color = COL_A, size = 5) +
+  annotate("text", x = x_center + x_scale_net * (0.76 - x_center), y = 0.91 + dy_net*1.5,
+           label = "Structural modification B", color = COL_B, size = 5) +
+  coord_cartesian(xlim = c(0.04, 1.04), ylim = c(-0.02, 0.90), expand = FALSE) +
+  # labs(title = "Structural changes represented as localized modified regions") +
+  labs(title = "A") +
+  theme_clean +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  )
+# ============================================================
+# Panel: frequency profiles
+# ============================================================
+
+p_prof <- ggplot(profile_df, aes(x = omega, y = sensitivity, color = class)) +
+  annotate("rect", xmin = min(OMEGAS), xmax = FREQ_SHIFT * 0.55, ymin = -Inf, ymax = Inf, fill = "grey70", alpha = 0.06) +
+  annotate("rect", xmin = FREQ_SHIFT * 0.55, xmax = FREQ_SHIFT * 1.35, ymin = -Inf, ymax = Inf, fill = "grey70", alpha = 0.10) +
+  annotate("rect", xmin = FREQ_SHIFT * 1.35, xmax = max(OMEGAS), ymin = -Inf, ymax = Inf, fill = "grey70", alpha = 0.06) +
+  geom_line(linewidth = 1.2) +
+  geom_vline(xintercept = omega_valley, color = "firebrick", linetype = "dashed", linewidth = 0.8) +
+  geom_vline(xintercept = omega_peak,   color = "navy",      linetype = "dashed", linewidth = 0.8) +
+  annotate("curve",
+           x = xA_lab, y = yA_lab,
+           xend = omega_valley, yend = yA_target,
+           curvature = -0.12, arrow = arrow(length = unit(0.18, "cm")),
+           color = alpha(COL_A, 0.55), linewidth = 0.7) +
+  annotate("curve",
+           x = xB_lab, y = yB_lab,
+           xend = omega_peak, yend = yB_target,
+           curvature = 0.12, arrow = arrow(length = unit(0.18, "cm")),
+           color = alpha(COL_B, 0.55), linewidth = 0.7) +
+  annotate("label",
+           x = xA_lab, y = yA_lab, label = "A matters more here",
+           fill = alpha("white", 0.95), color = COL_A, label.size = 0.3, size = 5) +
+  annotate("label",
+           x = xB_lab, y = yB_lab, label = "B matters more here",
+           fill = alpha("white", 0.95), color = COL_B, label.size = 0.3, size = 5) +
+  scale_x_log10(labels = label_math()) +
+  scale_y_log10(labels = label_math()) +
+  scale_color_manual(values = prof_cols) +
+  coord_cartesian(xlim = c(min(OMEGAS), max(OMEGAS)), ylim = y_prof, expand = FALSE) +
+  labs(
+    # title = "B. Different structural changes matter in different timescales",
+    title = "B",
+    x = "frequency \u03C9",
+    y = "sensitivity"
+  ) +
+  theme_clean +
+  theme(
+    legend.position = c(0.18, 0.12),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+# ============================================================
+# Forcing inset plots
+# ============================================================
+p_force_valley <- ggplot(forcing_valley_df, aes(x = time, y = value)) +
+  geom_line(color = "firebrick", linewidth = 0.5) +
+  annotate(
+    "text",
+    x = min(ts) + 0.96 * 0.42 * diff(range(ts)),
+    y = 1.25 * FORCE_AMPLITUDE,
+    label = sprintf("\u03C9 = %.3f", omega_valley),
+    hjust = 1, vjust = 1,
+    size = 3.2,
+    color = "black"
+  ) +
+  coord_cartesian(
+    xlim = c(min(ts), min(ts) + 0.42 * diff(range(ts))),
+    ylim = c(-1.05 * FORCE_AMPLITUDE, 1.35 * FORCE_AMPLITUDE),
+    expand = FALSE
+  ) +
+  theme_inset
+
+p_force_peak <- ggplot(forcing_peak_df, aes(x = time, y = value)) +
+  geom_line(color = "navy", linewidth = 0.5) +
+  annotate(
+    "text",
+    x = min(ts) + 0.96 * 0.42 * diff(range(ts)),
+    y = 1.25 * FORCE_AMPLITUDE,
+    label = sprintf("\u03C9 = %.3f", omega_peak),
+    hjust = 1, vjust = 1,
+    size = 3.2,
+    color = "black"
+  ) +
+  coord_cartesian(
+    xlim = c(min(ts), min(ts) + 0.42 * diff(range(ts))),
+    ylim = c(-1.05 * FORCE_AMPLITUDE, 1.35 * FORCE_AMPLITUDE),
+    expand = FALSE
+  ) +
+  theme_inset
+
+g_force_valley <- ggplotGrob(p_force_valley)
+g_force_peak   <- ggplotGrob(p_force_peak)
+
+# ============================================================
+# Panel: valley time series
+# ============================================================
+
+p_valley <- ggplot(valley_df, aes(x = time, y = value, color = series, linetype = series)) +
+  geom_vline(xintercept = FORCE_START, color = "grey35", linetype = "dashed", linewidth = 0.6) +
+  geom_line(linewidth = 1.0) +
+  annotation_custom(
+    grob = g_force_valley,
+    xmin = min(ts) + 0.02 * diff(range(ts)),
+    xmax = min(ts) + 0.28 * diff(range(ts)),
+    ymin = y_comm[2] - 0.34 * diff(y_comm),
+    ymax = y_comm[2] - 0.02 * diff(y_comm)
+  ) +
+  scale_color_manual(values = ts_cols) +
+  scale_linetype_manual(values = ts_ltys) +
+  coord_cartesian(xlim = c(min(ts), max(ts)), ylim = y_comm, expand = FALSE) +
+  labs(
+    # title = sprintf("C. \u03C9 = %.3f: responses under two structural modifications", omega_valley),
+    # title = sprintf("C. \u03C9 = %.3f:", omega_valley),
+    title = "C",
+    x = "time",
+    y = "Community abundance"
+  ) +
+  theme_clean +
+  theme(
+    legend.position = c(0.82, 0.88),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+# ============================================================
+# Panel: peak time series
+# ============================================================
+
+p_peak <- ggplot(peak_df, aes(x = time, y = value, color = series, linetype = series)) +
+  geom_vline(xintercept = FORCE_START, color = "grey35", linetype = "dashed", linewidth = 0.6) +
+  geom_line(linewidth = 1.0) +
+  annotation_custom(
+    grob = g_force_peak,
+    xmin = min(ts) + 0.02 * diff(range(ts)),
+    xmax = min(ts) + 0.28 * diff(range(ts)),
+    ymin = y_comm[2] - 0.34 * diff(y_comm),
+    ymax = y_comm[2] - 0.02 * diff(y_comm)
+  ) +
+  scale_color_manual(values = ts_cols) +
+  scale_linetype_manual(values = ts_ltys) +
+  coord_cartesian(xlim = c(min(ts), max(ts)), ylim = y_comm, expand = FALSE) +
+  labs(
+    # title = sprintf("D. \u03C9 = %.3f: responses under two structural modifications", omega_peak),
+    # title = sprintf("D. \u03C9 = %.3f:", omega_peak),
+    title = "D",
+    x = "time",
+    y = "Community abundance"
+  ) +
+  theme_clean +
+  theme(
+    legend.position = c(0.82, 0.88),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+# ============================================================
+# Assemble figure
+# ============================================================
+
+final_plot <- (p_net | p_prof) / (p_valley | p_peak)
+
+print(final_plot)
+
+# Optional save:
+ggsave("RPlots/figure2_ggplot_clean.png", final_plot, width = 15.5, height = 9.8, dpi = 300)
