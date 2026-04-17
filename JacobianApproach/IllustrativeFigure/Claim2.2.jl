@@ -409,25 +409,34 @@ begin
     mx = maximum(abs.(allvals))
 
     for (j, (name, A)) in enumerate(cases)
-        ax = Axis(
-            fig[1, j],
-            title = name,
-            xlabel = "j",
-            ylabel = j == 1 ? "i" : "",
-            aspect = DataAspect()
-        )
+    ax = Axis(
+        fig[1, j],
+        title = name,
+        xlabel = "Species j",
+        ylabel = "Species i",
+        aspect = DataAspect()
+    )
 
-        heatmap!(
-            ax, 1:size(A,2), 1:size(A,1), A;
-            colorrange = (-mx, mx),   # symmetric around 0
-            colormap = :balance       # neutral center at 0
-        )
+    heatmap!(
+        ax, 1:size(A,2), 1:size(A,1), A;
+        colorrange = (-mx, mx),
+        colormap = :balance
+    )
 
-        ylims!(ax, size(A,1) + 0.5, 0.5)
-        xlims!(ax, 0.5, size(A,2) + 0.5)
-    end
+    ylims!(ax, size(A,1) + 0.5, 0.5)
+    xlims!(ax, 0.5, size(A,2) + 0.5)
 
-    Colorbar(fig[1, 5], limits = (-mx, mx), colormap = :balance, label = "matrix entry")
+    ax.xticksvisible = false
+    ax.yticksvisible = false
+    ax.xticklabelsvisible = false
+    ax.yticklabelsvisible = false
+    ax.xminorticksvisible = false
+    ax.yminorticksvisible = false
+    ax.xgridvisible = false
+    ax.ygridvisible = false
+end
+
+    Colorbar(fig[1, 5], limits = (-mx, mx), colormap = :balance, label = "Interaction strength")
     # --- middle row: intrinsic sensitivity
     ax_intr = Axis(
         fig[2, 1:4],
@@ -443,20 +452,20 @@ begin
     end
     axislegend(ax_intr, position=:rt)
 
-    # --- bottom row: structured sensitivity
-    ax_struct = Axis(
-        fig[3, 1:4],
-        xlabel = "ω",
-        ylabel = "‖S(ω) P S(ω)‖₂",
-        title = "Structured sensitivity",
-        xscale = log10,
-        # yscale = log10
-    )
+    # # --- bottom row: structured sensitivity
+    # ax_struct = Axis(
+    #     fig[3, 1:4],
+    #     xlabel = "ω",
+    #     ylabel = "‖S(ω) P S(ω)‖₂",
+    #     title = "Structured sensitivity",
+    #     xscale = log10,
+    #     # yscale = log10
+    # )
 
-    for (name, _) in cases
-        lines!(ax_struct, ωs, struct_profiles[name], linewidth=3, label=name)
-    end
-    axislegend(ax_struct, position=:rt)
+    # for (name, _) in cases
+    #     lines!(ax_struct, ωs, struct_profiles[name], linewidth=3, label=name)
+    # end
+    # axislegend(ax_struct, position=:rt)
 
     Label(
         fig[0, 1:5],

@@ -138,11 +138,16 @@ A_raw = [
      0.10   0.00  -0.16  -1.50
      0.00   0.10   1.50  -0.16
 ]
-
+P_A = [
+    0.0  1.0  0.0  0.0
+    1.0  0.0  0.0  0.0
+    0.0  0.0  0.0  0.0
+    0.0  0.0  0.0  0.0
+]
 A = FREQ_SHIFT .* A_raw
 const TIME_SCALE = 0.65
 A = TIME_SCALE .* A
-A_mod = A + EPS_P .* P_focus
+# A_mod = A + EPS_P .* P_focus
 # Structural class A: change within slow block
 P_A = [
     0.0  1.0  0.0  0.0
@@ -164,10 +169,10 @@ const EPS_B = TIME_SCALE * 0.25
 A_A = A + EPS_A .* P_A
 A_B = A + EPS_B .* P_B
 
-println("Eigenvalues of A:")
-println(eigvals(A))
-println("\nEigenvalues of A_mod:")
-println(eigvals(A_mod))
+# println("Eigenvalues of A:")
+# println(eigvals(A))
+# println("\nEigenvalues of A_mod:")
+# println(eigvals(A_mod))
 
 # ============================================================
 # Frequency-domain analysis
@@ -223,9 +228,9 @@ Y_peak_B      = vec(c' * X_peak_B)
 Δ_peak_A = [norm(X_peak_A[:, i] - X_peak_base[:, i]) for i in eachindex(ts)]
 Δ_peak_B = [norm(X_peak_B[:, i] - X_peak_base[:, i]) for i in eachindex(ts)]
 
-println(@sprintf("Max ||Δx|| at valley: %.4f", maximum(Δ_valley)))
-println(@sprintf("Max ||Δx|| at peak:   %.4f", maximum(Δ_peak)))
-println(@sprintf("Peak/valley ||Δx|| ratio: %.2f", maximum(Δ_peak) / maximum(Δ_valley)))
+# println(@sprintf("Max ||Δx|| at valley: %.4f", maximum(Δ_valley)))
+# println(@sprintf("Max ||Δx|| at peak:   %.4f", maximum(Δ_peak)))
+# println(@sprintf("Peak/valley ||Δx|| ratio: %.2f", maximum(Δ_peak) / maximum(Δ_valley)))
 
 # Shared visual limits
 y_prof = profile_ylim(S_intr, S_A, S_B)
@@ -302,7 +307,7 @@ begin
     # --------------------------------------------------------
     axA = Axis(
         fig[1, 2],
-        title = "A. Different structural changes matter in different frequency bands",
+        title = "B. Different structural changes matter in different timescales",
         xlabel = "frequency ω",
         ylabel = "sensitivity",
         xscale = log10,
@@ -491,9 +496,9 @@ begin
     # --------------------------------------------------------
     axC = Axis(
         fig[2, 1],
-        title = @sprintf("C. Low-impact regime (ω = %.3f): responses under two structural modifications", ω_valley),
+        title = @sprintf("C. ω = %.3f: responses under two structural modifications", ω_valley),
         xlabel = "time",
-        ylabel = "community signal"
+        ylabel = "Community abundance"
     )
     xlims!(axC, first(ts), last(ts))
     ylims!(axC, y_comm...)
@@ -503,14 +508,14 @@ begin
     lines!(axC, ts, Y_valley_A, color = :darkorange, linewidth = 2.8, linestyle = :dot, label = "structural class A")
     lines!(axC, ts, Y_valley_B, color = :teal, linewidth = 2.8, linestyle = :dot, label = "structural class B")
 
-    axC_r = Axis(
-        fig[2, 1],
-        yaxisposition = :right,
-        ylabel = "‖Δx(t)‖"
-    )
-    hidespines!(axC_r)
-    hidexdecorations!(axC_r)
-    ylims!(axC_r, y_delta...)
+    # axC_r = Axis(
+    #     fig[2, 1],
+    #     yaxisposition = :right,
+    #     ylabel = "‖Δx(t)‖"
+    # )
+    # hidespines!(axC_r)
+    # hidexdecorations!(axC_r)
+    # ylims!(axC_r, y_delta...)
     # lines!(axC_r, ts, Δ_valley_A, color = (:darkorange, 0.65), linewidth = 3)
     # lines!(axC_r, ts, Δ_valley_B, color = (:teal, 0.65), linewidth = 3)
 
@@ -521,9 +526,9 @@ begin
     # --------------------------------------------------------
     axD = Axis(
         fig[2, 2],
-        title = @sprintf("D. High-impact regime (ω = %.3f): responses under two structural modifications", ω_peak),
+        title = @sprintf("D. ω = %.3f: responses under two structural modifications", ω_peak),
         xlabel = "time",
-        ylabel = "community signal"
+        ylabel = "Community abundance"
     )
     xlims!(axD, first(ts), last(ts))
     ylims!(axD, y_comm...)
@@ -533,14 +538,14 @@ begin
     lines!(axD, ts, Y_peak_A, color = :darkorange, linewidth = 2.8, linestyle = :dot, label = "structural class A")
     lines!(axD, ts, Y_peak_B, color = :teal, linewidth = 2.8, linestyle = :dot, label = "structural class B")
 
-    axD_r = Axis(
-        fig[2, 2],
-        yaxisposition = :right,
-        ylabel = "‖Δx(t)‖"
-    )
-    hidespines!(axD_r)
-    hidexdecorations!(axD_r)
-    ylims!(axD_r, y_delta...)
+    # axD_r = Axis(
+    #     fig[2, 2],
+    #     yaxisposition = :right,
+    #     ylabel = "‖Δx(t)‖"
+    # )
+    # hidespines!(axD_r)
+    # hidexdecorations!(axD_r)
+    # ylims!(axD_r, y_delta...)
     # lines!(axD_r, ts, Δ_peak_A, color = (:darkorange, 0.65), linewidth = 3)
     # lines!(axD_r, ts, Δ_peak_B, color = (:teal, 0.65), linewidth = 3)
 

@@ -429,7 +429,7 @@ begin
     lines!(ax13, ωs, profile_peak_meanrep, linewidth = 3, label = "mean-level rep.")
     lines!(ax13, ωs, profile_peak_max, linewidth = 3, label = "worst-case")
     lines!(ax13, ωs, profile_peak_min, linewidth = 3, label = "best-case")
-    axislegend(ax13, position = :rb)
+    axislegend(ax13, position = :lb)
 
     Colorbar(fig[1, 4], hm12, label = "peak")
 
@@ -484,7 +484,7 @@ begin
     lines!(ax23, ωs, profile_area_meanrep, linewidth = 3, label = "mean-level rep.")
     lines!(ax23, ωs, profile_area_max, linewidth = 3, label = "worst-case")
     lines!(ax23, ωs, profile_area_min, linewidth = 3, label = "best-case")
-    axislegend(ax23, position = :rb)
+    axislegend(ax23, position = :lb)
 
     Colorbar(fig[2, 4], hm22, label = "area")
 
