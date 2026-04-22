@@ -254,7 +254,7 @@ end
 # ------------------------------------------------------------
 # Shared frequency grid and perturbation class
 # ------------------------------------------------------------
-ωs = 10 .^ range(-3, 2, length=900)
+ωs = 10 .^ range(-1.5, 1.1, length=900)
 T_hom = Diagonal(ones(8))
 
 # structured perturbation emphasizing community-aware perturbations
