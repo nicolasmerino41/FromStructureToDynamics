@@ -74,7 +74,7 @@ end
 # ------------------------------------------------------------
 # Drawing
 # ------------------------------------------------------------
-function draw_colored_network!(ax, A, name, mx; node_size=24, line_width=3.0)
+function draw_colored_network!(ax, A, name, mx; node_size=16, line_width=2.2)
     G = interaction_matrix(A)
     n = size(G, 1)
     pts = network_layout(name, n)
@@ -92,18 +92,12 @@ function draw_colored_network!(ax, A, name, mx; node_size=24, line_width=3.0)
             )
         end
     end
-    scatter!(ax, first.(pts), last.(pts); color=:black, markersize=node_size)
 
-    for k in 1:n
-        text!(ax, string(k);
-            position=(pts[k][1], pts[k][2]),
-            align=(:center, :center),
-            color=:white,
-            fontsize=12
-        )
-    end
+    scatter!(ax, first.(pts), last.(pts);
+        color = :black,
+        markersize = node_size
+    )
 
-    ax.title = name
     hidedecorations!(ax)
     hidespines!(ax)
     ax.aspect = DataAspect()
