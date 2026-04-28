@@ -63,9 +63,9 @@ begin
     # -------------------------
     # Target frequencies
     # -------------------------
-    ω_low_target  = 0.22
+    ω_low_target  = 0.08
     ω_mid_target  = 0.62
-    ω_high_target = 1.35
+    ω_high_target = 2.8
 
     # -------------------------
     # Resonant blocks
@@ -74,9 +74,9 @@ begin
     # The intermediate block has much weaker damping,
     # so the intrinsic resolvent profile is dominated by it.
     # -------------------------
-    d_low  = 0.060
-    d_mid  = 0.0012
-    d_high = 0.075
+    d_low  = 2.0
+    d_mid  = 0.00005
+    d_high = 2.0
 
     ϵ12 = 2e-4
     ϵ23 = 2e-4
@@ -95,7 +95,7 @@ begin
     # -------------------------
     # Frequency profile
     # -------------------------
-    ωs = exp.(range(log(0.05), log(2.2), length=4000))
+    ωs = exp.(range(log(0.03), log(10.0), length=12000))
     S = intrinsic_profile(A, ωs)
 
     idx_low  = argmin(abs.(ωs .- ω_low_target))
@@ -200,9 +200,11 @@ begin
     axA = Axis(
         fig[1, 1:2],
         title = "A. Intrinsic sensitivity profile",
-        xlabel = "frequency ω",
-        ylabel = "resolvent norm",
         xscale = log10,
+        xticks = ([-0.6, -0.3, 0.0], ["-0.6", "-0.3", "0.0"]),
+        xlabel = "log(ω)",
+        ylabel = "resolvent norm",
+        # xscale = log10,
         yscale = log10,
         xgridvisible = false,
         ygridvisible = false,
@@ -229,8 +231,8 @@ begin
     # text!(axA, ω_high, 1.25 * S[idx_high],
     #     text = "high", color = high_col, align = (:center, :bottom), fontsize = 13)
 
-    ylims!(axA, 0.8 * yprof_min, 1.35 * yprof_max)
-
+    ylims!(axA, 0.8 * yprof_min, 5.0 * yprof_max)
+    xlims!(axA, 0.05, 4.0)
     # B1. Low component
     axB1 = Axis(
         fig[2, 1],
@@ -279,33 +281,33 @@ begin
     lines!(axC, ts, forcing_trace, color = multi_col, linewidth = 3)
     ylims!(axC, -1.1 * yf, 1.1 * yf)
 
-    # D. Individual species responses
-    axD = Axis(
-        fig[5, 1:2],
-        title = "D. Individual species responses",
-        xlabel = "time",
-        ylabel = "species state",
-        xgridvisible = false,
-        ygridvisible = false
-    )
-    # after simulation
-    burn = ts .>= 80.0
+    # # D. Individual species responses
+    # axD = Axis(
+    #     fig[5, 1:2],
+    #     title = "D. Individual species responses",
+    #     xlabel = "time",
+    #     ylabel = "species state",
+    #     xgridvisible = false,
+    #     ygridvisible = false
+    # )
+    # # after simulation
+    # burn = ts .>= 80.0
 
-    ts_plot = ts[burn]
-    X_plot = X[:, burn]
+    # ts_plot = ts[burn]
+    # X_plot = X[:, burn]
 
-    # biomass readout: ONLY intermediate species
-    c = [0.0, 0.0, 1.0, 1.0, 0.0, 0.0]
-    y = vec(c' * X)
+    # # biomass readout: ONLY intermediate species
+    # c = [0.0, 0.0, 1.0, 1.0, 0.0, 0.0]
+    # y = vec(c' * X)
 
-    y_plot = y[burn]
-    for i in 1:6
-        lines!(axD, ts_plot, X_plot[i, :],
-            color = species_cols[i],
-            linewidth = 2,
-            label = "species $i"
-        )
-    end
+    # y_plot = y[burn]
+    # for i in 1:6
+    #     lines!(axD, ts_plot, X_plot[i, :],
+    #         color = species_cols[i],
+    #         linewidth = 2,
+    #         label = "species $i"
+    #     )
+    # end
 
     # axislegend(
     #     axD,
@@ -319,7 +321,7 @@ begin
 
     # E. Aggregate community response
     axE = Axis(
-        fig[6, 1:2],
+        fig[5, 1],
         title = "E. Aggregate community response",
         xlabel = "time",
         ylabel = "biomass response",
