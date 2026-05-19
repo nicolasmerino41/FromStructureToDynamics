@@ -14,7 +14,7 @@ Official repository for the paper:
 
 ## 📌 Overview
 
-This repository contains the code needed to reproduce **Figure 4** and **Figure 5**. It is intentionally minimal. It produces:
+This repository contains the Julia code needed to reproduce **Figure 4** and **Figure 5**. It is intentionally minimal. It produces:
 
 * **Figure 4**: how different interaction geometries can produce different sensitivity profiles despite having the same asymptotic resilience.
 * **Figure 5**: how rearranging species’ characteristic timescales changes the sensitivity profile even when the interaction matrix is fixed.
