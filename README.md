@@ -21,7 +21,7 @@ This repository contains the Julia code needed to reproduce **Figure 4** and **F
 
 ## 📬 Contact
 
-For questions about the code or manuscript, please contact:
+For questions about the code or manuscript, feel free to contact me at:
 
 **Nicolàs Merino**
 [nicolasmerino41@gmail.com](mailto:nicolasmerino41@gmail.com)
