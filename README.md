@@ -10,7 +10,7 @@ Official repository for the paper:
 > 
 > *Nicolàs Merino, Jean-François Arnoldi, Miguel B. Araújo, Núria Galiana*
 >
-> Journal, Year
+> Ecology Letters, 2026
 
 ## 📌 Overview
 
