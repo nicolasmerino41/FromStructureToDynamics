@@ -1,0 +1,33 @@
+Illustrative single-link analysis; Julia 1.12.5
+CairoMakie 0.15.8
+Baseline maximum real eigenvalue: -1.0000000000000002
+Highlighted links: ["4 → 3", "6 → 5"]
+Highlighted angular frequencies: [0.010000000000000002, 4.346191744390391]
+Minimum opposing dominance ratio: 3.584888303310928
+Maximum relative factorisation error: 6.53229353588979e-16
+Maximum ODE vs exact frequency response error: 4.4955346786722745e-9
+Maximum ODE vs first-order error at epsilon=0.01: 0.004918069140175861
+Fixed forcing b = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+A = 
+6×6 Matrix{Float64}:
+ -1.0   -0.35  -0.0  -0.0  -0.0  -0.0
+  0.35  -1.0   -0.0  -0.0  -0.0  -0.0
+  2.5    1.0   -1.0  -1.2  -0.0  -0.0
+ -1.0    2.5    1.2  -1.0  -0.0  -0.0
+ -0.0   -0.0    2.5   1.0  -1.0  -4.0
+ -0.0   -0.0   -1.0   2.5   4.0  -1.0
+T = 
+6×6 Diagonal{Float64, Vector{Float64}}:
+ 1.0   ⋅    ⋅    ⋅    ⋅    ⋅ 
+  ⋅   1.0   ⋅    ⋅    ⋅    ⋅ 
+  ⋅    ⋅   1.0   ⋅    ⋅    ⋅ 
+  ⋅    ⋅    ⋅   1.0   ⋅    ⋅ 
+  ⋅    ⋅    ⋅    ⋅   1.0   ⋅ 
+  ⋅    ⋅    ⋅    ⋅    ⋅   1.0
+Link 4 → 3 omega=0.010000000000000002 potential=1.3369228868962992 realized=0.9198670981328331
+
+Link 6 → 5 omega=0.010000000000000002 potential=0.2831251814442537 realized=0.2522161552713841
+
+Link 4 → 3 omega=4.346191744390391 potential=0.17619239964871805 realized=0.0385478860966404
+
+Link 6 → 5 omega=4.346191744390391 potential=0.6316300726329737 realized=0.15923256806262837
