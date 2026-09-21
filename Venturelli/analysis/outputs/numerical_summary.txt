@@ -1,0 +1,11 @@
+Julia 1.12.5; CairoMakie 0.15.8
+Residents T3/T4: ["BU", "BO", "EL", "FP", "DP", "ER"]
+T3 nonzero resident links: 19
+T3 slow-fast rank correlation: 0.9315789473684211
+Maximum rank change: 5.0
+Top at 6 h: BO → BU
+Top at 336 h: BO → BU
+Largest nonlinear-vs-local waveform error: 0.0006938040301485355
+Largest derivative error: 0.18514947016844613
+T3 resident stability -0.0782412939906205 invasion margin -0.09656534656633514
+T4 resident stability -0.049036142199274386 invasion margin -0.014645668232218745
