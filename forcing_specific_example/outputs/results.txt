@@ -1,0 +1,23 @@
+Julia 1.12.5; CairoMakie 0.15.8
+A = [-1.0 -2.0; 2.0 -1.0]; T=I; b=[1.0, 0.0]; focal species=2
+Forcing amplitude=0.2; absolute link increment=0.2
+First-order crossover omega=sqrt(k^2-1)=1.7320508075688772
+Predicted A/B focal RMS ratio = k^2/(1+omega^2)
+Predicted A/B community RMS ratio = k/sqrt(1+omega^2)
+
+omega=0.5; period=12.566370614359172
+Simulated focal RMS A/B = [0.005221825843611258, 0.001388354532848227]; ratio=3.7611616630073703
+Simulated community RMS A/B = [0.005982353048556289, 0.0028452801086959476]; ratio=2.1025532882588944
+A: weaken 2 → 1: predicted focal=0.004801573898773373; predicted community=0.005500893961513304; relative prediction error=0.0804798852784483
+B: strengthen 1 → 2: predicted focal=0.0015004918433666795; predicted community=0.003075093208740465; relative prediction error=0.08076993872840377
+Direct ODE baseline vs exact periodic solution relative error=8.857511511527436e-12
+
+omega=4.0; period=1.5707963267948966
+Simulated focal RMS A/B = [0.000597259453962791, 0.0026619997208345756]; ratio=0.2243649573995979
+Simulated community RMS A/B = [0.0013684933286894567, 0.0029586472742429465]; ratio=0.4625402090350984
+A: weaken 2 → 1: predicted focal=0.000611551810755933; predicted community=0.0014012412320881862; relative prediction error=0.023929896267810724
+B: strengthen 1 → 2: predicted focal=0.0025990951957127156; predicted community=0.002888732803435111; relative prediction error=0.023630552859913
+Direct ODE baseline vs exact periodic solution relative error=9.356945966128713e-12
+
+This is a designed transparent illustrative local linear model, not empirical or nonlinear validation.
+No search over networks, inputs, observables or frequencies; the chosen frequencies straddle an analytic crossover.

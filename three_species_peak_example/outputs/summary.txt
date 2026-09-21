@@ -1,0 +1,17 @@
+Julia 1.12.5; CairoMakie 0.15.8
+A=[-1.0 -2.0 0.0; 2.0 -1.0 0.0; 1.0 1.0 -1.0]; T=[1.0, 1.0, 2.0]; forcing b=[1.0, 0.0, 0.0]; forcing amplitude=0.2
+Equal interaction increments=0.6 (30.0%). Focal species=2.
+Selection: maximize D_A-D_B, then D_B-D_A, using exact finite-change community RMS. Restricted to omega >= 0.5; no curve-peak or ratio selection.
+Equal forcing RMS=0.1414213562373095. Both panels use periodic input AMP*cos(omega*t), with identical amplitude and phase.
+
+Largest advantage of modification 1: omega=0.5; signed gap=0.021936800694297244; regime=periodic forcing
+A: weaken 2 → 1; community RMS=0.029788233190763198; focal RMS=0.018958596718110867; species3 squared share=0.46835443037974644; first-order complex error=0.2472125772598104
+B: strengthen 1 → 2; community RMS=0.007851432496499236; focal RMS=0.0036215957529695114; species3 squared share=0.10638297872340588; first-order complex error=0.24721257725980894
+
+Largest advantage of modification 2: omega=2.7282858049006524; signed gap=0.01069433799235613; regime=periodic forcing
+A: weaken 2 → 1; community RMS=0.01558494958856387; focal RMS=0.008652341287075599; species3 squared share=0.04117233490845853; first-order complex error=0.20071189903400294
+B: strengthen 1 → 2; community RMS=0.026279287581385043; focal RMS=0.02141253114156523; species3 squared share=0.021573590896880348; first-order complex error=0.20071189903400338
+Both panels show two periodic cycles after transients. RMS uses four complete cycles.
+
+Main curves use exact finite-change resolvents, not first-order derivatives. This is exact only within the local linear model.
+Species 3 changes the output weighting but does not feed back to species 2. The extra species makes community and focal responses distinct, not independent.
