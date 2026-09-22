@@ -1,0 +1,29 @@
+Julia 1.12.5; CairoMakie 0.15.8
+Pathogen-present residents: Other, Blautia, Mollicutes, Akkermansia, Coprobacillus, C. difficile, Enterobacter.
+Full Jacobian margin (per day): -0.010803716918294182
+Frequency endpoint rank correlation community: 0.9320962644842395
+Frequency endpoint rank correlation pathogen: 0.9121627096669638
+Max frequency rank range community: 17.0
+Max frequency rank range pathogen: 34.0
+Frequency winners community: C. difficile → Enterobacter.; C. difficile → Other; C. difficile → Akkermansia
+Frequency winners pathogen: Blautia → C. difficile; C. difficile → Other; Other → C. difficile; C. difficile → Akkermansia
+Pulse 0.25 d; top community: C. difficile → Other; top pathogen: C. difficile → Akkermansia
+Pulse 0.5 d; top community: C. difficile → Other; top pathogen: C. difficile → Akkermansia
+Pulse 1.0 d; top community: C. difficile → Other; top pathogen: C. difficile → Akkermansia
+Pulse 2.0 d; top community: C. difficile → Other; top pathogen: C. difficile → Akkermansia
+Pulse 4.0 d; top community: C. difficile → Akkermansia; top pathogen: C. difficile → Akkermansia
+Pulse 7.0 d; top community: C. difficile → Akkermansia; top pathogen: C. difficile → Akkermansia
+Pulse 14.0 d; top community: C. difficile → Akkermansia; top pathogen: C. difficile → Akkermansia
+Pulse 28.0 d; top community: C. difficile → Akkermansia; top pathogen: C. difficile → Akkermansia
+Pulse endpoint rank correlation community: 0.9917348675147881
+Pulse endpoint rank correlation pathogen: 0.9982173243659347
+Link magnitude vs pathogen sensitivity rank correlation at 7 d: 0.10185560327364071
+Max nonlinear/local error: 0.0018417313014616728
+Max derivative error at fraction 0.001: 0.021222114736055373
+Max derivative error at fraction 0.005: 0.10900303051682791
+Max derivative error at fraction 0.01: 0.22635730234525175
+Max derivative error at fraction 0.05: no feasible/stable tested case
+Max derivative error at fraction 0.1: no feasible/stable tested case
+Max frozen equilibrium/input error: 1.0041648789604145
+Validation rows not feasible/stable: 4
+Selected link boundary: ("C. difficile → Akkermansia", 0.027685939215800023, 0.027685939215800114)
