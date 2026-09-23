@@ -1,0 +1,24 @@
+Completed checks (errors are fractions, not percentages)
+OU analytic vs Lyapunov: 1.5543122344752192e-15
+Harmonic analytic vs resolvent: 1.4432899320127035e-15
+Lyapunov residual: 1.1701349579590384e-15
+Full derivative vs finite difference: 3.2086807554181354e-10
+Dimensionless sign derivative: 5.9598397328386454e-9
+OU covariance vs spectral quadrature: 6.492121398249395e-7
+Nonlinear RK4 step halving: 7.838119042702374e-11
+Nonlinear vs local variance, largest error: 0.0009259202689146928
+
+Baseline equilibrium R=0.4, C=0.6; modified R=0.4444444444444445, C=0.6172839506172839
+Harmonic example 1: omega=0.15740545070390713, resource variance change=11.707218340207914%, CV2 change=-9.517153144431578%
+Harmonic example 2: omega=0.372411668638256, resource variance change=-15.268949938827802%, CV2 change=-31.367849450450514%
+OU q=0.2 tau=0.01: absolute change=5.000765502339499%, CV2 change=-14.949379943105%
+OU q=0.2 tau=1.0: absolute change=3.6688570290721145%, CV2 change=-16.02822580645158%
+OU q=0.2 tau=100.0: absolute change=7.83272686673131%, CV2 change=-12.655491237947626%
+OU q=0.4 tau=0.01: absolute change=-4.782196695961948%, CV2 change=-22.873579323729164%
+OU q=0.4 tau=1.0: absolute change=-6.917499510092096%, CV2 change=-24.603174603174594%
+OU q=0.4 tau=100.0: absolute change=2.2151480444340343%, CV2 change=-17.20573008400842%
+OU q=0.6 tau=0.01: absolute change=-22.8905033005668%, CV2 change=-37.5413076734591%
+OU q=0.6 tau=1.0: absolute change=-25.21367521367519%, CV2 change=-39.423076923076906%
+OU q=0.6 tau=100.0: absolute change=-9.529933928481515%, CV2 change=-26.719246482070012%
+OU CV2 map maximum effect=-11.441248701534922%; all tested CV2 changes negative.
+All 4 figures are PNG only. Exact finite-change local effects are used unless explicitly labelled first-order.

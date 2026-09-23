@@ -1,0 +1,2 @@
+# Preserve the small, generated numerical tables despite the parent CSV rule.
+!outputs/*.csv

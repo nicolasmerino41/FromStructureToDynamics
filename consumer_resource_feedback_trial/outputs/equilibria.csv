@@ -1,0 +1,3 @@
+state,attack_rate,resource,consumer,resource_over_K,max_eigenvalue_real
+original,1.0,0.4,0.6,0.4,-0.20000000000000004
+modified,0.9,0.4444444444444445,0.6172839506172839,0.4444444444444445,-0.22222222222222227
