@@ -140,42 +140,206 @@ function main()
     # Figure 1: signed harmonic effects, same intervention throughout.
     absmap=zeros(length(FREQ),length(GAMMAS)); cvmap=similar(absmap)
     rows=Vector{Any}()
+
     for (j,g) in enumerate(GAMMAS), (i,w) in enumerate(FREQ)
         a=from_q(BASE_Q,g); b=modified(a)
         @assert a.stable && b.stable
         v=harmvar(a,w)[1]; vm=harmvar(b,w)[1]
-        absmap[i,j]=percent(v,vm); cvmap[i,j]=percent(v/a.R^2,vm/b.R^2)
+        absmap[i,j]=percent(v,vm)
+        cvmap[i,j]=percent(v/a.R^2,vm/b.R^2)
         push!(rows,(w,g,v,vm,absmap[i,j],cvmap[i,j]))
     end
-    csv("harmonic_map.csv",["omega_over_r","consumer_speed_s_m_over_r","resource_variance","modified_variance","variance_change_percent","cv2_change_percent"],rows)
-    v0=[harmvar(p,w)[1] for w in FREQ]; v1=[harmvar(pm,w)[1] for w in FREQ]
+
+    csv(
+        "harmonic_map.csv",
+        ["omega_over_r","consumer_speed_s_m_over_r",
+        "resource_variance","modified_variance",
+        "variance_change_percent","cv2_change_percent"],
+        rows
+    )
+
+    v0=[harmvar(p,w)[1] for w in FREQ]
+    v1=[harmvar(pm,w)[1] for w in FREQ]
     dif=v1-v0
+
     eligible=findall(v0 .>= 0.10maximum(v0))
-    ilo=eligible[argmax(dif[eligible])]; ihi=eligible[argmin(dif[eligible])]
+    ilo=eligible[argmax(dif[eligible])]
+    ihi=eligible[argmin(dif[eligible])]
     chosen=[FREQ[ilo],FREQ[ihi]]
+
     @assert dif[ilo]>0 && dif[ihi]<0
-    f=Figure(size=(1400,980),figure_padding=26)
-    Label(f[0,1:3],"Does weaker consumption buffer or amplify resource fluctuations?",fontsize=29,font=:bold,tellwidth=false)
-    ax=Axis(f[1,1],title="A  Change in resource variance",xlabel="Environmental frequency  ω / r",ylabel="Consumer response speed  s m / r",xscale=log10,yscale=log10)
-    hm=heatmap!(ax,FREQ,GAMMAS,absmap,colormap=:RdBu_11,colorrange=(-60,60),lowclip=:darkred,highclip=:darkblue)
-    contour!(ax,FREQ,GAMMAS,absmap,levels=[0.],color=:black,linewidth=2)
-    hlines!(ax,[BASE_GAMMA],color=:gray25,linestyle=:dash)
-    scatter!(ax,chosen,fill(BASE_GAMMA,2),color=:white,strokecolor=:black,strokewidth=2,markersize=13)
-    ax=Axis(f[1,2],title="B  Change in relative variance (CV²)",xlabel="Environmental frequency  ω / r",ylabel="Consumer response speed  s m / r",xscale=log10,yscale=log10)
-    heatmap!(ax,FREQ,GAMMAS,cvmap,colormap=:RdBu_11,colorrange=(-60,60),lowclip=:darkred,highclip=:darkblue)
-    contour!(ax,FREQ,GAMMAS,cvmap,levels=[0.],color=:black,linewidth=2)
-    Colorbar(f[1,3],hm,label="Change after 10% lower attack rate (%)")
-    ax=Axis(f[2,1],title="C  Baseline slice: absolute response",xlabel="Environmental frequency  ω / r",ylabel="Resource standard deviation / K",xscale=log10)
-    lines!(ax,FREQ,sqrt.(v0),color=BLUE,linewidth=3,label="Original attack rate")
-    lines!(ax,FREQ,sqrt.(v1),color=ORANGE,linewidth=3,label="10% lower attack rate")
-    vlines!(ax,chosen,color=:gray40,linestyle=:dash)
-    axislegend(ax,position=:rt)
-    ax=Axis(f[2,2],title="D  Same slice: sign and measurement",xlabel="Environmental frequency  ω / r",ylabel="Change (%)",xscale=log10)
-    lines!(ax,FREQ,percent.(v0,v1),color=INK,linewidth=3,label="Absolute variance")
-    lines!(ax,FREQ,percent.(v0./p.R^2,v1./pm.R^2),color=:gray50,linewidth=3,linestyle=:dash,label="Relative variance (CV²)")
-    hlines!(ax,[0.],color=:gray70);vlines!(ax,chosen,color=:gray60,linestyle=:dot)
-    axislegend(ax,position=:rb)
-    Label(f[3,1:3],"Type-I consumer–resource model • resource growth is forced • each intervention uses its own equilibrium\nBlack contours: zero effect. Red: less variable; blue: more variable. Colour scale saturates at ±60%.",fontsize=17,tellwidth=false)
+
+    # Independent symmetric color ranges for A and B
+    limA = maximum(abs, absmap)
+    limB = maximum(abs, cvmap)
+
+    f=Figure(size=(1500,980), figure_padding=26)
+
+    Label(
+        f[0,1:4],
+        "Does weaker consumption buffer or amplify resource fluctuations?",
+        fontsize=29,
+        font=:bold,
+        tellwidth=false
+    )
+
+    # ---------------- Panel A ----------------
+    axA=Axis(
+        f[1,1],
+        title="A  Change in resource variance",
+        xlabel="Environmental frequency  ω / r",
+        ylabel="Consumer response speed  s m / r",
+        xscale=log10,
+        yscale=log10
+    )
+
+    hmA=heatmap!(
+        axA,
+        FREQ,
+        GAMMAS,
+        absmap,
+        colormap=:RdBu_11,
+        colorrange=(-limA,limA)
+    )
+
+    contour!(
+        axA,
+        FREQ,
+        GAMMAS,
+        absmap,
+        levels=[0.],
+        color=:black,
+        linewidth=2
+    )
+
+    hlines!(
+        axA,
+        [BASE_GAMMA],
+        color=:gray25,
+        linestyle=:dash
+    )
+
+    scatter!(
+        axA,
+        chosen,
+        fill(BASE_GAMMA,2),
+        color=:white,
+        strokecolor=:black,
+        strokewidth=2,
+        markersize=13
+    )
+
+    Colorbar(
+        f[1,2],
+        hmA,
+        label="Change in resource variance (%)"
+    )
+
+    # ---------------- Panel B ----------------
+    axB=Axis(
+        f[1,3],
+        title="B  Change in relative variance (CV²)",
+        xlabel="Environmental frequency  ω / r",
+        ylabel="Consumer response speed  s m / r",
+        xscale=log10,
+        yscale=log10
+    )
+
+    hmB=heatmap!(
+        axB,
+        FREQ,
+        GAMMAS,
+        cvmap,
+        colormap=:RdBu_11,
+        colorrange=(-limB,limB)
+    )
+
+    contour!(
+        axB,
+        FREQ,
+        GAMMAS,
+        cvmap,
+        levels=[0.],
+        color=:black,
+        linewidth=2
+    )
+
+    Colorbar(
+        f[1,4],
+        hmB,
+        label="Change in relative variance, CV² (%)"
+    )
+
+    # ---------------- Panel C ----------------
+    axC=Axis(
+        f[2,1:2],
+        title="C  Baseline slice: absolute response",
+        xlabel="Environmental frequency  ω / r",
+        ylabel="Resource standard deviation / K",
+        xscale=log10
+    )
+
+    lines!(
+        axC,
+        FREQ,
+        sqrt.(v0),
+        color=BLUE,
+        linewidth=3,
+        label="Original attack rate"
+    )
+
+    lines!(
+        axC,
+        FREQ,
+        sqrt.(v1),
+        color=ORANGE,
+        linewidth=3,
+        label="10% lower attack rate"
+    )
+
+    vlines!(axC,chosen,color=:gray40,linestyle=:dash)
+    axislegend(axC,position=:rt)
+
+    # ---------------- Panel D ----------------
+    axD=Axis(
+        f[2,3:4],
+        title="D  Same slice: sign and measurement",
+        xlabel="Environmental frequency  ω / r",
+        ylabel="Change (%)",
+        xscale=log10
+    )
+
+    lines!(
+        axD,
+        FREQ,
+        percent.(v0,v1),
+        color=INK,
+        linewidth=3,
+        label="Absolute variance"
+    )
+
+    lines!(
+        axD,
+        FREQ,
+        percent.(v0./p.R^2,v1./pm.R^2),
+        color=:gray50,
+        linewidth=3,
+        linestyle=:dash,
+        label="Relative variance (CV²)"
+    )
+
+    hlines!(axD,[0.],color=:gray70)
+    vlines!(axD,chosen,color=:gray60,linestyle=:dot)
+    axislegend(axD,position=:rb)
+
+    Label(
+        f[3,1:4],
+        "Type-I consumer–resource model • resource growth is forced • each intervention uses its own equilibrium\n" *
+        "Black contours: zero effect. Red: less variable; blue: more variable.",
+        fontsize=17,
+        tellwidth=false
+    )
+
     savepng("01_periodic_response_map",f)
 
     # Figure 2: independent nonlinear checks and a useful mechanistic diagnostic.
